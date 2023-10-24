@@ -251,7 +251,7 @@ class EthStreamerAdapter:
         self.item_exporter.close()
 
     def choose_block_base_on_delay_time(self, target_block, current_block):
-        block_info = self.get_block_info()
+        block_info = self.get_block_info(target_block)
         block_end_time = block_info.timestamp
         current_time = datetime.timestamp(datetime.now())
         # Calculation delay
