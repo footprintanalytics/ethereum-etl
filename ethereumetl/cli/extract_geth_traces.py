@@ -50,4 +50,4 @@ def extract_geth_traces(input, batch_size, output, max_workers):
             max_workers=max_workers,
             item_exporter=traces_item_exporter(output))
 
-        job.run()
+    job.run()

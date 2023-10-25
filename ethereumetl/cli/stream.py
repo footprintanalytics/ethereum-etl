@@ -33,28 +33,6 @@ from ethereumetl.streaming.web3_provider_selector import Web3ProviderSelector
 from ethereumetl.thread_local_proxy import ThreadLocalProxy
 
 
-@click.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.option('-l', '--last-synced-block-file', default='last_synced_block.txt', show_default=True, type=str, help='')
-@click.option('--lag', default=0, show_default=True, type=int, help='The number of blocks to lag behind the network.')
-@click.option('-p', '--provider-uri', default='https://mainnet.infura.io', show_default=True, type=str,
-              help='The URI of the web3 provider e.g. '
-                   'file://$HOME/Library/Ethereum/geth.ipc or https://mainnet.infura.io')
-@click.option('-o', '--output', type=str,
-              help='Either Google PubSub topic path e.g. projects/your-project/topics/crypto_ethereum; '
-                   'or Postgres connection url e.g. postgresql+pg8000://postgres:admin@127.0.0.1:5432/ethereum; '
-                   'or GCS bucket e.g. gs://your-bucket-name; '
-                   'or kafka, output name and connection host:port e.g. kafka/127.0.0.1:9092 '
-                   'or Kinesis, e.g. kinesis://your-data-stream-name'
-                   'If not specified will print to console')
-@click.option('-s', '--start-block', default=None, show_default=True, type=int, help='Start block')
-@click.option('-e', '--entity-types', default=','.join(EntityType.ALL_FOR_INFURA), show_default=True, type=str,
-              help='The list of entity types to export.')
-@click.option('--period-seconds', default=10, show_default=True, type=int, help='How many seconds to sleep between syncs')
-@click.option('-b', '--batch-size', default=10, show_default=True, type=int, help='How many blocks to batch in single request')
-@click.option('-B', '--block-batch-size', default=1, show_default=True, type=int, help='How many blocks to batch in single sync round')
-@click.option('-w', '--max-workers', default=5, show_default=True, type=int, help='The number of workers')
-@click.option('--log-file', default=None, show_default=True, type=str, help='Log file')
-@click.option('--pid-file', default=None, show_default=True, type=str, help='pid file')
 def stream(last_synced_block_file, lag, provider_uri, output, start_block, entity_types,
            period_seconds=10, batch_size=2, block_batch_size=10, max_workers=5, log_file=None, pid_file=None):
     """Streams all data types to console or Google Pub/Sub."""
@@ -114,5 +92,8 @@ def parse_provider_uri(provider_uri):
 
 
 if __name__ == '__main__':
-    pass
+    stream(last_synced_block_file='/Users/fp/PycharmProjects/ethereum-etl/ethereumetl/cli/synced_block/aaa.txt', lag=10,
+           provider_uri='https://solemn-purple-uranium.optimism.quiknode.pro/8c1c1c839b13597f1d9b55ed397d431dfe8bd577/',
+           output=None, start_block=None, entity_types='geth_traces',
+           period_seconds=10, batch_size=1, block_batch_size=1, max_workers=1, log_file=None, pid_file=None)
 

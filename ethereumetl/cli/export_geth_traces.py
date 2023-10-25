@@ -19,9 +19,10 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
+import json
 
 import click
+from blockchainetl.jobs.exporters.in_memory_item_exporter import InMemoryItemExporter
 
 from ethereumetl.jobs.export_geth_traces_job import ExportGethTracesJob
 from ethereumetl.jobs.exporters.geth_traces_item_exporter import geth_traces_item_exporter
@@ -32,24 +33,23 @@ from ethereumetl.thread_local_proxy import ThreadLocalProxy
 logging_basic_config()
 
 
-@click.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.option('-s', '--start-block', default=0, show_default=True, type=int, help='Start block')
-@click.option('-e', '--end-block', required=True, type=int, help='End block')
-@click.option('-b', '--batch-size', default=100, show_default=True, type=int, help='The number of blocks to process at a time.')
-@click.option('-o', '--output', default='-', show_default=True, type=str,
-              help='The output file for geth traces. If not specified stdout is used.')
-@click.option('-w', '--max-workers', default=5, show_default=True, type=int, help='The maximum number of workers.')
-@click.option('-p', '--provider-uri', required=True, type=str,
-              help='The URI of the web3 provider e.g. '
-                   'file://$HOME/Library/Ethereum/geth.ipc or http://localhost:8545/')
 def export_geth_traces(start_block, end_block, batch_size, output, max_workers, provider_uri):
     """Exports traces from geth node."""
+    exporter = InMemoryItemExporter(item_types=['geth_trace'])
     job = ExportGethTracesJob(
         start_block=start_block,
         end_block=end_block,
         batch_size=batch_size,
         batch_web3_provider=ThreadLocalProxy(lambda: get_provider_from_uri(provider_uri, batch=True)),
         max_workers=max_workers,
-        item_exporter=geth_traces_item_exporter(output))
+        item_exporter=exporter
+    )
 
     job.run()
+    geth_traces = exporter.get_items('geth_trace')
+    if isinstance(geth_traces, list):
+        traces_iterable = (json.loads(trace) for trace in geth_traces)
+    print(geth_traces)
+
+if __name__ == '__main__':
+    export_geth_traces(start_block=111269878, end_block=111269879, batch_size=1, output='/Users/fp/PycharmProjects/bsc-etl-airflow/dags/bscetl/cli/geth_traces.json', max_workers=1, provider_uri='https://solemn-purple-uranium.optimism.quiknode.pro/8c1c1c839b13597f1d9b55ed397d431dfe8bd577/')

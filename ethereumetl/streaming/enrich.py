@@ -182,6 +182,64 @@ def enrich_traces(blocks, traces):
     return result
 
 
+def enrich_geth_traces(blocks, transactions, traces):
+    tmp = list(join(
+        traces, blocks, ('block_number', 'number'),
+        [
+            'transaction_index',
+            'from_address',
+            'to_address',
+            'value',
+            'input',
+            'output',
+            'trace_type',
+            'call_type',
+            'gas',
+            'gas_used',
+            'subtraces',
+            'trace_address',
+            'error',
+            'status',
+            'block_number',
+            'trace_id'
+        ],
+        [
+            ('timestamp', 'block_timestamp'),
+            ('hash', 'block_hash'),
+        ]))
+    result = list(join(
+        tmp, transactions, [('block_number', 'block_number'), ('transaction_index', 'transaction_index')],
+        [
+            'transaction_index',
+            'from_address',
+            'to_address',
+            'value',
+            'input',
+            'output',
+            'trace_type',
+            'call_type',
+            'gas',
+            'gas_used',
+            'subtraces',
+            'trace_address',
+            'error',
+            'status',
+            'block_number',
+            'trace_id',
+            'block_timestamp',
+            'block_hash'
+        ],
+        [
+            'transaction_hash'
+        ]
+    ))
+
+    if len(result) != len(traces):
+        raise ValueError('The number of traces is wrong ' + str(result))
+
+    return result
+
+
 def enrich_contracts(blocks, contracts):
     result = list(join(
         contracts, blocks, ('block_number', 'number'),

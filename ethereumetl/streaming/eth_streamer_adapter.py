@@ -1,5 +1,13 @@
+import json
 import logging
 from datetime import datetime
+
+from ethereumetl.jobs.exporters.traces_item_exporter import traces_item_exporter
+
+from ethereumetl.jobs.extract_geth_traces_job import ExtractGethTracesJob
+
+from ethereumetl.cli import extract_geth_traces
+from ethereumetl.jobs.export_geth_traces_job import ExportGethTracesJob
 
 from blockchainetl.jobs.exporters.console_item_exporter import ConsoleItemExporter
 from blockchainetl.jobs.exporters.in_memory_item_exporter import InMemoryItemExporter
@@ -11,7 +19,7 @@ from ethereumetl.jobs.extract_contracts_job import ExtractContractsJob
 from ethereumetl.jobs.extract_token_transfers_job import ExtractTokenTransfersJob
 from ethereumetl.jobs.extract_tokens_job import ExtractTokensJob
 from ethereumetl.streaming.enrich import enrich_transactions, enrich_logs, enrich_token_transfers, enrich_traces, \
-    enrich_contracts, enrich_tokens
+    enrich_contracts, enrich_tokens, enrich_geth_traces
 from ethereumetl.streaming.eth_item_id_calculator import EthItemIdCalculator
 from ethereumetl.streaming.eth_item_timestamp_calculator import EthItemTimestampCalculator
 from ethereumetl.streaming.web3_provider_selector import Web3ProviderSelector
@@ -90,6 +98,11 @@ class EthStreamerAdapter:
         if self._should_export(EntityType.TOKEN):
             tokens = self._extract_tokens(contracts)
 
+        geth_traces = []
+        if self._should_export(EntityType.GETH_TRACES):
+            geth_traces = self._export_geth_traces(start_block, end_block)
+            geth_traces = self._extract_geth_traces(geth_traces)
+
         enriched_blocks = blocks \
             if EntityType.BLOCK in self.entity_types else []
         enriched_transactions = enrich_transactions(transactions, receipts) \
@@ -100,10 +113,15 @@ class EthStreamerAdapter:
             if EntityType.TOKEN_TRANSFER in self.entity_types else []
         enriched_traces = enrich_traces(blocks, traces) \
             if EntityType.TRACE in self.entity_types else []
+        enriched_geth_traces = enrich_geth_traces(blocks, transactions, geth_traces) \
+            if EntityType.GETH_TRACES in self.entity_types else []
         enriched_contracts = enrich_contracts(blocks, contracts) \
             if EntityType.CONTRACT in self.entity_types else []
         enriched_tokens = enrich_tokens(blocks, tokens) \
             if EntityType.TOKEN in self.entity_types else []
+
+        if EntityType.GETH_TRACES in self.entity_types:
+            enriched_traces = enriched_geth_traces
 
         logging.info('Exporting with ' + type(self.item_exporter).__name__)
 
@@ -186,6 +204,35 @@ class EthStreamerAdapter:
         traces = exporter.get_items('trace')
         return traces
 
+    def _export_geth_traces(self, start_block, end_block):
+        exporter = InMemoryItemExporter(item_types=['geth_trace'])
+        job = ExportGethTracesJob(
+            start_block=start_block,
+            end_block=end_block,
+            batch_size=self.batch_size,
+            batch_web3_provider=self.web3_provider_selector.batch_web3_provider,
+            max_workers=self.max_workers,
+            item_exporter=exporter
+        )
+        job.run()
+        geth_traces = exporter.get_items('geth_trace')
+        return geth_traces
+
+    def _extract_geth_traces(self, geth_traces):
+        """convert geth_traces to python iterable"""
+        traces_iterable = (trace for trace in geth_traces)
+
+        exporter = InMemoryItemExporter(item_types=['trace'])
+        job = ExtractGethTracesJob(
+            traces_iterable=traces_iterable,
+            batch_size=self.batch_size,
+            max_workers=self.max_workers,
+            item_exporter=exporter
+        )
+        job.run()
+        geth_traces = exporter.get_items('trace')
+        return geth_traces
+
     def _export_contracts(self, traces):
         exporter = InMemoryItemExporter(item_types=['contract'])
         job = ExtractContractsJob(
@@ -234,6 +281,9 @@ class EthStreamerAdapter:
 
         if entity_type == EntityType.TOKEN:
             return EntityType.TOKEN in self.entity_types
+
+        if entity_type == EntityType.GETH_TRACES:
+            return EntityType.GETH_TRACES in self.entity_types
 
         raise ValueError('Unexpected entity type ' + entity_type)
 
