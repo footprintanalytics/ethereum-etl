@@ -24,12 +24,18 @@ class AutoSwitchNodeJob(BaseJob):
 
     def _export_batch_with_auto_switch_node(self, items):
         retry = True
+        counter = 0
         while retry:
             try:
                 self._export_function(items)
                 retry = False
             except Exception as e:
+                sleep_s = 280
+                if counter > len(self.web3_provider_selector.provider_uri_range)*3:
+                    logging.info(f'try too must, retry after sleep {sleep_s}s ')
+                    sleep(sleep_s)
                 logging.exception('An exception occurred. Trying another uri')
+                counter += 1
                 sleep(5)
                 if not self.web3_provider_selector:
                     self.web3_provider_selector = ThreadLocalProxy(lambda: Web3ProviderSelector(get_provider_uri()))
@@ -42,6 +48,7 @@ class AutoSwitchNodeJob(BaseJob):
 
     def export_with_auto_switch_node(self):
         retry = True
+        counter = 0
         while retry:
             self.batch_web3_provider = self.web3_provider_selector.select_provider()
             self.web3 = ThreadLocalProxy(lambda: build_web3(self.batch_web3_provider))
@@ -49,6 +56,11 @@ class AutoSwitchNodeJob(BaseJob):
                 self._export()
                 retry = False
             except Exception as e:
+                sleep_s = 280
+                if counter > len(self.web3_provider_selector.provider_uri_range)*3:
+                    logging.info(f'try too must, retry after sleep {sleep_s}s ')
+                    sleep(sleep_s)
+                counter += 1
                 logging.exception('An exception occurred. Trying another uri')
                 sleep(5)
                 # self.export_with_auto_switch_node()

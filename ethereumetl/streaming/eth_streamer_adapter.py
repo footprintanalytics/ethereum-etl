@@ -47,13 +47,20 @@ class EthStreamerAdapter:
 
     def get_block_info(self, block_number=None):
         block_info = None
+        counter = 0
         while not block_info:
             try:
                 w3 = build_web3(self.web3_provider_selector.batch_web3_provider)
                 block_info = w3.eth.getBlock(block_number if block_number else "latest")
             except Exception as e:
+                sleep_s = 280
+                if counter > len(self.web3_provider_selector.provider_uri_range) * 3:
+                    logging.info(f'try too must, retry after sleep {sleep_s}s ')
+                    sleep(sleep_s)
+                counter += 1
                 sleep(5)
                 self.web3_provider_selector.select_provider()
+                logging.info(e)
         return block_info
 
     def get_current_block_number(self):
