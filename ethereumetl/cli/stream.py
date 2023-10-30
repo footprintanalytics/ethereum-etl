@@ -19,7 +19,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import logging
 import random
 
 import click
@@ -27,6 +26,7 @@ from blockchainetl.streaming.streaming_utils import configure_signals, configure
 from ethereumetl.enumeration.entity_type import EntityType
 
 from ethereumetl.providers.auto import get_multi_provider_from_uris
+from ethereumetl.providers.multi_batch_rpc import EndpointManager
 from ethereumetl.streaming.item_exporter_creator import create_item_exporters
 from ethereumetl.thread_local_proxy import ThreadLocalProxy
 
@@ -63,8 +63,10 @@ def stream(last_synced_block_file, lag, provider_uri, output, start_block, entit
     from ethereumetl.streaming.eth_streamer_adapter import EthStreamerAdapter
     from blockchainetl.streaming.streamer import Streamer
 
+    endpoint_manager = EndpointManager(provider_uri.split(','))
     streamer_adapter = EthStreamerAdapter(
-        batch_web3_provider=ThreadLocalProxy(lambda: get_multi_provider_from_uris(provider_uri, batch=True)),
+        batch_web3_provider=ThreadLocalProxy(
+            lambda: get_multi_provider_from_uris(provider_uri, endpoint_manager=endpoint_manager, batch=True)),
         item_exporter=create_item_exporters(output),
         batch_size=batch_size,
         max_workers=max_workers,
@@ -90,7 +92,7 @@ def parse_entity_types(entity_types):
         if entity_type not in EntityType.ALL_FOR_STREAMING:
             raise click.BadOptionUsage(
                 '--entity-type', '{} is not an available entity type. Supply a comma separated list of types from {}'
-                    .format(entity_type, ','.join(EntityType.ALL_FOR_STREAMING)))
+                .format(entity_type, ','.join(EntityType.ALL_FOR_STREAMING)))
 
     return entity_types
 
@@ -98,3 +100,7 @@ def parse_entity_types(entity_types):
 def pick_random_provider_uri(provider_uri):
     provider_uris = [uri.strip() for uri in provider_uri.split(',')]
     return random.choice(provider_uris)
+
+
+def parse_provider_uri(provider_uri):
+    return [uri.strip() for uri in provider_uri.split(',')]

@@ -19,6 +19,8 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import logging
+import threading
 import time
 from typing import (
     Any,
@@ -31,6 +33,8 @@ from eth_typing import (
 )
 from web3 import HTTPProvider
 from web3._utils.request import make_post_request
+
+lock = threading.Lock()
 
 
 class NoActiveProviderError(Exception):
@@ -51,10 +55,11 @@ class EndpointStatus():
         if self.status == 'active':
             return True
         elif self.status == 'failed':
-            if self.err_code == 429 and int(time.time()) - self.fail_time > 60 * 10:
-                self.status = 'active'
-                return True
-            if int(time.time()) - self.fail_time > 60:
+            if self.err_code == 429:
+                if int(time.time()) - self.fail_time > 60 * 10:
+                    self.status = 'active'
+                    return True
+            elif int(time.time()) - self.fail_time > 60:
                 self.status = 'active'
                 return True
         return False
@@ -66,37 +71,56 @@ class EndpointStatus():
         pass
 
 
-# Mostly copied from web3.py/providers/rpc.py. Supports batch requests.
-# Will be removed once batch feature is added to web3.py https://github.com/ethereum/web3.py/issues/832
-class BatchMultiHTTPProvider(HTTPProvider):
+class EndpointManager():
+    logger = logging.getLogger("etl.providers.EndpointManager")
+    call_times: int = 0
     _current_endpoint_index: int = 0
     _last_working_provider_index: int = 0
 
-    def __init__(
-            self, endpoint_urls: List[Union[URI, str]],
-            request_kwargs: Optional[Any] = None,
-            session: Optional[Any] = None
-    ) -> None:
-        super().__init__(endpoint_urls[0], request_kwargs, session)
+    def __init__(self, endpoint_urls: List[Union[URI, str]]) -> None:
         self._hosts_uri = endpoint_urls
         self._endpoints_len = len(self._hosts_uri)
         self._endpoints = [EndpointStatus(endpoint_url) for index, endpoint_url in enumerate(endpoint_urls)]
         self.endpoint = self._endpoints[0]
         self.endpoint_uri = self.endpoint.endpoint_url
-        # self.logger.setLevel(logging.DEBUG)
 
     def get_next_active_endpoint(self):
-        self._current_endpoint_index = (self._current_endpoint_index + 1) % self._endpoints_len
+        with lock:
+            self._current_endpoint_index = (self._current_endpoint_index + 1) % self._endpoints_len
         endpoint = self._endpoints[self._current_endpoint_index]
         if not endpoint.is_active():
             return self.get_next_active_endpoint()
+        # self.logger.info("change endpoint to : %s,  index: %s ", endpoint.endpoint_url, self._current_endpoint_index)
+        self.display_endpoint_stats()
         return endpoint
+
+    def display_endpoint_stats(self):
+        self.call_times = (self.call_times + 1) % 200
+        if self.call_times == 0:
+            active_ = [index for index, endpoint in enumerate(self._endpoints) if endpoint.is_active()]
+            self.logger.info("active endpoints %s ", active_)
+            not_active_ = [index for index, endpoint in enumerate(self._endpoints) if not endpoint.is_active()]
+            self.logger.info("not active endpoints %s ", not_active_)
+
+
+# Mostly copied from web3.py/providers/rpc.py. Supports batch requests.
+# Will be removed once batch feature is added to web3.py https://github.com/ethereum/web3.py/issues/832
+class BatchMultiHTTPProvider(HTTPProvider):
+    def __init__(
+            self, endpoint_manager: EndpointManager = None,
+            request_kwargs: Optional[Any] = None,
+            session: Optional[Any] = None
+    ) -> None:
+        super().__init__(endpoint_manager.endpoint_uri, request_kwargs, session)
+        self.endpoint_manager = endpoint_manager
+        self.endpoint = self.endpoint_manager.get_next_active_endpoint()
 
     def make_batch_request(self, text):
         # self.logger.info("Making request HTTP. URI: %s ",self.endpoint.endpoint_url)
         self.logger.debug("Making request HTTP. URI: %s, Request: %s",
                           self.endpoint.endpoint_url, text)
         request_data = text.encode('utf-8')
+        self.endpoint = self.endpoint_manager.get_next_active_endpoint()
         try:
             raw_response = make_post_request(
                 self.endpoint.endpoint_url,
@@ -107,7 +131,6 @@ class BatchMultiHTTPProvider(HTTPProvider):
             self.logger.debug("Getting response HTTP. URI: %s, "
                               "Request: %s, Response: %s",
                               self.endpoint.endpoint_url, text, response)
-            self.endpoint = self.get_next_active_endpoint()
             return response
         except Exception as error:  # pylint: disable=W0703
             self.logger.warning(
@@ -121,7 +144,6 @@ class BatchMultiHTTPProvider(HTTPProvider):
             if 'Too Many Requests' in str(error):
                 error_code = 429
             self.endpoint.fail(error_code)
-
-            self.endpoint = self.get_next_active_endpoint()
+            self.endpoint = self.endpoint_manager.get_next_active_endpoint()
 
             return self.make_batch_request(text)

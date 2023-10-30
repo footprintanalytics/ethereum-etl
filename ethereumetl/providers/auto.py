@@ -49,7 +49,7 @@ def get_provider_from_uri(uri_string, timeout=DEFAULT_TIMEOUT, batch=False):
         raise ValueError('Unknown uri scheme {}'.format(uri_string))
 
 
-def get_multi_provider_from_uris(uris_string, timeout=DEFAULT_TIMEOUT, batch=False):
+def get_multi_provider_from_uris(uris_string, endpoint_manager, timeout=DEFAULT_TIMEOUT, batch=False):
     uri_string = uris_string[0]
     uri = urlparse(uri_string)
     if uri.scheme == 'file':
@@ -63,6 +63,6 @@ def get_multi_provider_from_uris(uris_string, timeout=DEFAULT_TIMEOUT, batch=Fal
     if len(uris) == 0:
         raise ValueError('No uris provided')
     if batch:
-        return BatchMultiHTTPProvider(uris, request_kwargs=request_kwargs)
+        return BatchMultiHTTPProvider(request_kwargs=request_kwargs, endpoint_manager=endpoint_manager)
     else:
         return HTTPProvider(uri_string, request_kwargs=request_kwargs)
