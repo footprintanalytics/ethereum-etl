@@ -93,7 +93,8 @@ def enrich_transactions(transactions, receipts):
         ]))
 
     if len(result) != len(transactions):
-        raise ValueError(f'The number of transactions is wrong result:{len(result)} transactions:{len(transactions)}')
+        block_numbers = set([tx['block_number'] for tx in transactions])
+        raise ValueError(f'The number of transactions is wrong blocks:{block_numbers} result:{len(result)} transactions:{len(transactions)}')
 
     return result
 
@@ -117,7 +118,8 @@ def enrich_logs(blocks, logs):
         ]))
 
     if len(result) != len(logs):
-        raise ValueError(f'The number of logs is wrong logs:{len(logs)} result:{len(result)}')
+        block_numbers = set([log['block_number'] for log in logs])
+        raise ValueError(f'The number of logs is wrong blocks:{block_numbers} logs:{len(logs)} result:{len(result)}')
 
     return result
 

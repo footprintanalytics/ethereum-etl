@@ -34,6 +34,8 @@ from eth_typing import (
 from web3 import HTTPProvider
 from web3._utils.request import make_post_request
 
+from ethereumetl.utils import hex_to_dec
+
 lock = threading.Lock()
 
 
@@ -95,7 +97,7 @@ class EndpointManager():
             self._current_endpoint_index = (self._current_endpoint_index + 1) % self._endpoints_len
         endpoint = self._endpoints[self._current_endpoint_index]
         if not endpoint.is_active():
-            return self.get_next_active_endpoint(depth+1)
+            return self.get_next_active_endpoint(depth + 1)
         # self.logger.info("change endpoint to : %s,  index: %s ", endpoint.endpoint_url, self._current_endpoint_index)
         self.display_endpoint_stats()
         return endpoint
@@ -109,6 +111,15 @@ class EndpointManager():
                            not endpoint.is_active()]
             self.logger.info("not active endpoints %s ", '\n'.join(not_active_))
 
+
+def is_continuous(numbers):
+    sorted_numbers = sorted(numbers)
+
+    for i in range(1, len(sorted_numbers)):
+        if sorted_numbers[i] != sorted_numbers[i - 1] + 1:
+            return False
+
+    return True
 
 # Mostly copied from web3.py/providers/rpc.py. Supports batch requests.
 # Will be removed once batch feature is added to web3.py https://github.com/ethereum/web3.py/issues/832
@@ -138,12 +149,19 @@ class BatchMultiHTTPProvider(HTTPProvider):
             self.logger.debug("Getting response HTTP. URI: %s, "
                               "Request: %s, Response: %s",
                               self.endpoint.endpoint_url, text, response)
+
+            block_numbers = set()
             for response_item in response:
                 if isinstance(response_item, str):
                     raise ValueError(self.endpoint.endpoint_url + ' not support json rpc ' + response_item)
                 result = response_item.get('result')
                 if result is None:
                     raise ValueError(self.endpoint.endpoint_url + ' not support json rpc')
+                block_number = result.get('blockNumber')
+                if block_number is not None:
+                    block_numbers.add(hex_to_dec(block_number))
+            if not is_continuous(block_numbers):
+                self.logger.warning('%s endpoint block_numbers is wrong %s', self.endpoint.endpoint_url, block_numbers)
             return response
         except Exception as error:  # pylint: disable=W0703
             self.logger.warning(
