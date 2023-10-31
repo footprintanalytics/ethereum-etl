@@ -29,7 +29,7 @@ from ethereumetl.providers.ipc import BatchIPCProvider
 from ethereumetl.providers.multi_batch_rpc import BatchMultiHTTPProvider
 from ethereumetl.providers.rpc import BatchHTTPProvider
 
-DEFAULT_TIMEOUT = 60
+DEFAULT_TIMEOUT = 20
 
 
 def get_provider_from_uri(uri_string, timeout=DEFAULT_TIMEOUT, batch=False):
