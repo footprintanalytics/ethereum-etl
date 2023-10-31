@@ -51,17 +51,21 @@ class EndpointStatus():
         self.endpoint_url = endpoint_url
         self.status = 'active'
 
+    def fail_pass_time(self):
+        return int(time.time()) - self.fail_time
+
     def is_active(self):
         if self.status == 'active':
             return True
         elif self.status == 'failed':
-            if self.err_code == 429:
-                if int(time.time()) - self.fail_time > 60 * 10:
-                    self.status = 'active'
-                    return True
-            elif int(time.time()) - self.fail_time > 60:
+            if self.err_code == 429 and self.fail_pass_time() > 60 * 10:
                 self.status = 'active'
                 return True
+            if self.err_code == 400 and self.fail_pass_time() > 60 * 1:
+                self.status = 'active'
+                return True
+            if self.err_code == 500:
+                return False
         return False
 
     def fail(self, err_code: int):
@@ -99,8 +103,9 @@ class EndpointManager():
         if self.call_times == 0:
             active_ = [index for index, endpoint in enumerate(self._endpoints) if endpoint.is_active()]
             self.logger.info("active endpoints %s ", active_)
-            not_active_ = [index for index, endpoint in enumerate(self._endpoints) if not endpoint.is_active()]
-            self.logger.info("not active endpoints %s ", not_active_)
+            not_active_ = [endpoint.endpoint_url for index, endpoint in enumerate(self._endpoints) if
+                           not endpoint.is_active()]
+            self.logger.info("not active endpoints %s ", '\n'.join(not_active_))
 
 
 # Mostly copied from web3.py/providers/rpc.py. Supports batch requests.
@@ -131,6 +136,12 @@ class BatchMultiHTTPProvider(HTTPProvider):
             self.logger.debug("Getting response HTTP. URI: %s, "
                               "Request: %s, Response: %s",
                               self.endpoint.endpoint_url, text, response)
+            for response_item in response:
+                if isinstance(response_item, str):
+                    raise ValueError(self.endpoint.endpoint_url + ' not support json rpc ' + response_item)
+                result = response_item.get('result')
+                if result is None:
+                    raise ValueError(self.endpoint.endpoint_url + ' not support json rpc')
             return response
         except Exception as error:  # pylint: disable=W0703
             self.logger.warning(
@@ -143,6 +154,8 @@ class BatchMultiHTTPProvider(HTTPProvider):
             error_code = 400
             if 'Too Many Requests' in str(error):
                 error_code = 429
+            if 'not support json rpc' in str(error):
+                error_code = 500
             self.endpoint.fail(error_code)
             self.endpoint = self.endpoint_manager.get_next_active_endpoint()
 
