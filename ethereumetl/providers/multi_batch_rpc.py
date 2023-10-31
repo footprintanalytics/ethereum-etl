@@ -88,12 +88,14 @@ class EndpointManager():
         self.endpoint = self._endpoints[0]
         self.endpoint_uri = self.endpoint.endpoint_url
 
-    def get_next_active_endpoint(self):
+    def get_next_active_endpoint(self, depth=0):
+        if depth > (self._endpoints_len * 2):
+            raise NoActiveProviderError("No active provider")
         with lock:
             self._current_endpoint_index = (self._current_endpoint_index + 1) % self._endpoints_len
         endpoint = self._endpoints[self._current_endpoint_index]
         if not endpoint.is_active():
-            return self.get_next_active_endpoint()
+            return self.get_next_active_endpoint(depth+1)
         # self.logger.info("change endpoint to : %s,  index: %s ", endpoint.endpoint_url, self._current_endpoint_index)
         self.display_endpoint_stats()
         return endpoint
