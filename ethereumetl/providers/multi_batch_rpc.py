@@ -160,8 +160,8 @@ class BatchMultiHTTPProvider(HTTPProvider):
                 block_number = result.get('blockNumber')
                 if block_number is not None:
                     block_numbers.add(hex_to_dec(block_number))
-            if not is_continuous(block_numbers):
-                self.logger.warning('%s endpoint block_numbers is wrong %s', self.endpoint.endpoint_url, block_numbers)
+            # if not is_continuous(block_numbers):
+            #     self.logger.warning('%s endpoint block_numbers is wrong %s', self.endpoint.endpoint_url, block_numbers)
             return response
         except Exception as error:  # pylint: disable=W0703
             self.logger.warning(
