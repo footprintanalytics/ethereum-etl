@@ -150,16 +150,16 @@ class BatchMultiHTTPProvider(HTTPProvider):
                               "Request: %s, Response: %s",
                               self.endpoint.endpoint_url, text, response)
 
-            block_numbers = set()
+            # block_numbers = set()
             for response_item in response:
                 if isinstance(response_item, str):
                     raise ValueError(self.endpoint.endpoint_url + ' not support json rpc ' + response_item)
                 result = response_item.get('result')
                 if result is None:
                     raise ValueError(self.endpoint.endpoint_url + ' not support json rpc')
-                block_number = result.get('blockNumber')
-                if block_number is not None:
-                    block_numbers.add(hex_to_dec(block_number))
+                # block_number = result.get('blockNumber')
+                # if block_number is not None:
+                #     block_numbers.add(hex_to_dec(block_number))
             # if not is_continuous(block_numbers):
             #     self.logger.warning('%s endpoint block_numbers is wrong %s', self.endpoint.endpoint_url, block_numbers)
             return response
