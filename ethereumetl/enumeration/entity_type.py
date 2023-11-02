@@ -5,6 +5,7 @@ class EntityType:
     LOG = 'log'
     TOKEN_TRANSFER = 'token_transfer'
     TRACE = 'trace'
+    GETH_TRACES = 'geth_traces'
     CONTRACT = 'contract'
     TOKEN = 'token'
 

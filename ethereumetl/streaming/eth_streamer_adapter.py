@@ -4,13 +4,15 @@ from blockchainetl.jobs.exporters.console_item_exporter import ConsoleItemExport
 from blockchainetl.jobs.exporters.in_memory_item_exporter import InMemoryItemExporter
 from ethereumetl.enumeration.entity_type import EntityType
 from ethereumetl.jobs.export_blocks_job import ExportBlocksJob
+from ethereumetl.jobs.export_geth_traces_job import ExportGethTracesJob
 from ethereumetl.jobs.export_receipts_job import ExportReceiptsJob
 from ethereumetl.jobs.export_traces_job import ExportTracesJob
 from ethereumetl.jobs.extract_contracts_job import ExtractContractsJob
+from ethereumetl.jobs.extract_geth_traces_job import ExtractGethTracesJob
 from ethereumetl.jobs.extract_token_transfers_job import ExtractTokenTransfersJob
 from ethereumetl.jobs.extract_tokens_job import ExtractTokensJob
 from ethereumetl.streaming.enrich import enrich_transactions, enrich_logs, enrich_token_transfers, enrich_traces, \
-    enrich_contracts, enrich_tokens
+    enrich_contracts, enrich_tokens, enrich_geth_traces
 from ethereumetl.streaming.eth_item_id_calculator import EthItemIdCalculator
 from ethereumetl.streaming.eth_item_timestamp_calculator import EthItemTimestampCalculator
 from ethereumetl.thread_local_proxy import ThreadLocalProxy
@@ -60,6 +62,10 @@ class EthStreamerAdapter:
         traces = []
         if self._should_export(EntityType.TRACE):
             traces = self._export_traces(start_block, end_block)
+        geth_traces = []
+        if self._should_export(EntityType.GETH_TRACES):
+            geth_traces = self._export_geth_traces(start_block, end_block)
+            geth_traces = self._extract_geth_traces(geth_traces)
 
         # Export contracts
         contracts = []
@@ -81,6 +87,8 @@ class EthStreamerAdapter:
             if EntityType.TOKEN_TRANSFER in self.entity_types else []
         enriched_traces = enrich_traces(blocks, traces) \
             if EntityType.TRACE in self.entity_types else []
+        enriched_geth_traces = enrich_geth_traces(blocks, transactions, geth_traces) \
+            if EntityType.GETH_TRACES in self.entity_types else []
         enriched_contracts = enrich_contracts(blocks, contracts) \
             if EntityType.CONTRACT in self.entity_types else []
         enriched_tokens = enrich_tokens(blocks, tokens) \
@@ -94,6 +102,7 @@ class EthStreamerAdapter:
             sort_by(enriched_logs, ('block_number', 'log_index')) + \
             sort_by(enriched_token_transfers, ('block_number', 'log_index')) + \
             sort_by(enriched_traces, ('block_number', 'trace_index')) + \
+            sort_by(enriched_geth_traces, ('block_number', 'trace_index')) + \
             sort_by(enriched_contracts, ('block_number',)) + \
             sort_by(enriched_tokens, ('block_number',))
 
@@ -160,6 +169,35 @@ class EthStreamerAdapter:
         traces = exporter.get_items('trace')
         return traces
 
+    def _export_geth_traces(self, start_block, end_block):
+        exporter = InMemoryItemExporter(item_types=['geth_trace'])
+        job = ExportGethTracesJob(
+            start_block=start_block,
+            end_block=end_block,
+            batch_size=self.batch_size,
+            batch_web3_provider=self.batch_web3_provider,
+            max_workers=self.max_workers,
+            item_exporter=exporter
+        )
+        job.run()
+        geth_traces = exporter.get_items('geth_trace')
+        return geth_traces
+
+    def _extract_geth_traces(self, geth_traces):
+        """convert geth_traces to python iterable"""
+        traces_iterable = (trace for trace in geth_traces)
+
+        exporter = InMemoryItemExporter(item_types=['trace'])
+        job = ExtractGethTracesJob(
+            traces_iterable=traces_iterable,
+            batch_size=self.batch_size,
+            max_workers=self.max_workers,
+            item_exporter=exporter
+        )
+        job.run()
+        geth_traces = exporter.get_items('trace')
+        return geth_traces
+
     def _export_contracts(self, traces):
         exporter = InMemoryItemExporter(item_types=['contract'])
         job = ExtractContractsJob(
@@ -202,6 +240,9 @@ class EthStreamerAdapter:
 
         if entity_type == EntityType.TRACE:
             return EntityType.TRACE in self.entity_types or self._should_export(EntityType.CONTRACT)
+
+        if entity_type == EntityType.GETH_TRACES:
+            return EntityType.GETH_TRACES in self.entity_types
 
         if entity_type == EntityType.CONTRACT:
             return EntityType.CONTRACT in self.entity_types or self._should_export(EntityType.TOKEN)
