@@ -26,7 +26,8 @@ class EthStreamerAdapter:
             item_exporter=ConsoleItemExporter(),
             batch_size=100,
             max_workers=5,
-            entity_types=tuple(EntityType.ALL_FOR_STREAMING)):
+            entity_types=tuple(EntityType.ALL_FOR_STREAMING),
+            geth_traces_provider=None):
         self.batch_web3_provider = batch_web3_provider
         self.item_exporter = item_exporter
         self.batch_size = batch_size
@@ -34,6 +35,7 @@ class EthStreamerAdapter:
         self.entity_types = entity_types
         self.item_id_calculator = EthItemIdCalculator()
         self.item_timestamp_calculator = EthItemTimestampCalculator()
+        self.geth_traces_provider = geth_traces_provider
 
     def open(self):
         self.item_exporter.open()
@@ -175,7 +177,7 @@ class EthStreamerAdapter:
             start_block=start_block,
             end_block=end_block,
             batch_size=self.batch_size,
-            batch_web3_provider=self.batch_web3_provider,
+            batch_web3_provider=self.geth_traces_provider,
             max_workers=self.max_workers,
             item_exporter=exporter
         )
@@ -227,7 +229,8 @@ class EthStreamerAdapter:
             return True
 
         if entity_type == EntityType.TRANSACTION:
-            return EntityType.TRANSACTION in self.entity_types or self._should_export(EntityType.LOG)
+            return EntityType.TRANSACTION in self.entity_types or self._should_export(EntityType.LOG) \
+                   or EntityType.GETH_TRACES in self.entity_types
 
         if entity_type == EntityType.RECEIPT:
             return EntityType.TRANSACTION in self.entity_types or self._should_export(EntityType.TOKEN_TRANSFER)
