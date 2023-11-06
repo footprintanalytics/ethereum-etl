@@ -26,9 +26,10 @@ from urllib.parse import urlparse
 from web3 import IPCProvider, HTTPProvider
 
 from ethereumetl.providers.ipc import BatchIPCProvider
+from ethereumetl.providers.multi_batch_rpc import BatchMultiHTTPProvider
 from ethereumetl.providers.rpc import BatchHTTPProvider
 
-DEFAULT_TIMEOUT = 60
+DEFAULT_TIMEOUT = 20
 
 
 def get_provider_from_uri(uri_string, timeout=DEFAULT_TIMEOUT, batch=False):
@@ -47,3 +48,21 @@ def get_provider_from_uri(uri_string, timeout=DEFAULT_TIMEOUT, batch=False):
     else:
         raise ValueError('Unknown uri scheme {}'.format(uri_string))
 
+
+def get_multi_provider_from_uris(uris_string, endpoint_manager, timeout=DEFAULT_TIMEOUT, batch=False):
+    uri_string = uris_string[0]
+    uri = urlparse(uri_string)
+    if uri.scheme == 'file':
+        if batch:
+            return BatchIPCProvider(uri.path, timeout=timeout)
+        else:
+            return IPCProvider(uri.path, timeout=timeout)
+
+    request_kwargs = {'timeout': timeout}
+    uris = uris_string.split(',')
+    if len(uris) == 0:
+        raise ValueError('No uris provided')
+    if batch:
+        return BatchMultiHTTPProvider(request_kwargs=request_kwargs, endpoint_manager=endpoint_manager)
+    else:
+        return HTTPProvider(uri_string, request_kwargs=request_kwargs)

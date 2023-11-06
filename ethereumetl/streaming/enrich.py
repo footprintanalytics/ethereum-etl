@@ -56,6 +56,42 @@ def join(left, right, join_fields, left_fields, right_fields):
 
             yield result_item
 
+def multi_join(left, right, join_fields, left_fields, right_fields):
+    def field_list_to_dict(field_list):
+        result_dict = {}
+        for field in field_list:
+            if isinstance(field, tuple):
+                result_dict[field[0]] = field[1]
+            else:
+                result_dict[field] = field
+        return result_dict
+
+    left_join_fields = join_fields[0]
+    right_join_fields = join_fields[1]
+
+    left_fields_as_dict = field_list_to_dict(left_fields)
+    right_fields_as_dict = field_list_to_dict(right_fields)
+
+    left_map = defaultdict(list)
+    for item in left:
+        key = tuple(item[field] for field in left_join_fields)
+        left_map[key].append(item)
+
+    right_map = defaultdict(list)
+    for item in right:
+        key = tuple(item[field] for field in right_join_fields)
+        right_map[key].append(item)
+
+    for key in set(left_map.keys()) & set(right_map.keys()):
+        for left_item, right_item in itertools.product(left_map[key], right_map[key]):
+            result_item = {}
+            for src_field, dst_field in left_fields_as_dict.items():
+                result_item[dst_field] = left_item.get(src_field)
+            for src_field, dst_field in right_fields_as_dict.items():
+                result_item[dst_field] = right_item.get(src_field)
+
+            yield result_item
+
 
 def enrich_transactions(transactions, receipts):
     result = list(join(
@@ -93,7 +129,8 @@ def enrich_transactions(transactions, receipts):
         ]))
 
     if len(result) != len(transactions):
-        raise ValueError('The number of transactions is wrong ' + str(result))
+        block_numbers = set([tx['block_number'] for tx in transactions])
+        raise ValueError(f'The number of transactions is wrong blocks:{block_numbers} result:{len(result)} transactions:{len(transactions)}')
 
     return result
 
@@ -117,7 +154,8 @@ def enrich_logs(blocks, logs):
         ]))
 
     if len(result) != len(logs):
-        raise ValueError('The number of logs is wrong ' + str(result))
+        block_numbers = set([log['block_number'] for log in logs])
+        raise ValueError(f'The number of logs is wrong blocks:{block_numbers} logs:{len(logs)} result:{len(result)}')
 
     return result
 
@@ -178,6 +216,51 @@ def enrich_traces(blocks, traces):
 
     if len(result) != len(traces):
         raise ValueError('The number of traces is wrong ' + str(result))
+
+    return result
+
+
+def enrich_geth_traces(blocks, transactions, traces):
+    traces_fields = [
+            'type',
+            'transaction_index',
+            'from_address',
+            'to_address',
+            'value',
+            'input',
+            'output',
+            'trace_type',
+            'call_type',
+            'reward_type',
+            'gas',
+            'gas_used',
+            'subtraces',
+            'trace_address',
+            'error',
+            'status',
+            'transaction_hash',
+            'block_number',
+            'trace_id',
+            'trace_index'
+        ]
+    traces_blocks = list(join(
+        traces, blocks, ('block_number', 'number'),
+        traces_fields,
+        [
+            ('timestamp', 'block_timestamp'),
+            ('hash', 'block_hash'),
+        ]))
+
+    result = list(multi_join(
+        traces_blocks, transactions, (['block_number', 'transaction_index'], ['block_number', 'transaction_index']),
+        traces_fields + ['block_timestamp', 'block_hash'],
+        [
+            'transaction_hash'
+        ]))
+
+    if len(result) != len(traces):
+        raise ValueError(
+            f'The number of traces is wrong blocks:{len(blocks)} transactions:{len(traces)} traces:{len(traces)} result:{len(result)}')
 
     return result
 
