@@ -68,7 +68,7 @@ def stream(last_synced_block_file, lag, provider_uri, output, start_block, entit
     from blockchainetl.streaming.streamer import Streamer
 
     endpoint_manager = EndpointManager(provider_uri.split(','))
-    geth_traces_provider_uri = None
+    geth_traces_provider = None
     if geth_traces_provider_uri is not None:
         geth_traces_provider = ThreadLocalProxy(
             lambda: get_multi_provider_from_uris(geth_traces_provider_uri, endpoint_manager=endpoint_manager, batch=True))
