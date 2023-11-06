@@ -37,7 +37,7 @@ from ethereumetl.thread_local_proxy import ThreadLocalProxy
 @click.option('-p', '--provider-uri', default='https://mainnet.infura.io', show_default=True, type=str,
               help='The URI of the web3 provider e.g. '
                    'file://$HOME/Library/Ethereum/geth.ipc or https://mainnet.infura.io')
-@click.option('--geth_traces_provider_uri', default='https://mainnet.infura.io', show_default=True, type=str,
+@click.option('--geth_traces_provider_uri', default=None, show_default=True, type=str,
               help='The URI of the web3 provider e.g. '
                    'file://$HOME/Library/Ethereum/geth.ipc or https://mainnet.infura.io')
 @click.option('-o', '--output', type=str,
