@@ -28,6 +28,7 @@ from blockchainetl.jobs.base_job import BaseJob
 from ethereumetl.json_rpc_requests import generate_get_block_by_number_json_rpc
 from ethereumetl.mappers.block_mapper import EthBlockMapper
 from ethereumetl.mappers.transaction_mapper import EthTransactionMapper
+from ethereumetl.misc.retriable_value_error import RetriableValueError
 from ethereumetl.utils import rpc_response_batch_to_results, validate_range
 
 
@@ -72,10 +73,14 @@ class ExportBlocksJob(BaseJob):
 
     def _export_batch(self, block_number_batch):
         blocks_rpc = list(generate_get_block_by_number_json_rpc(block_number_batch, self.export_transactions))
-        response = self.batch_web3_provider.make_batch_request(json.dumps(blocks_rpc))
+        response, endpoint_url = self.batch_web3_provider.make_batch_request(json.dumps(blocks_rpc))
         results = rpc_response_batch_to_results(response)
         blocks = [self.block_mapper.json_dict_to_block(result) for result in results]
-
+        # Validate transactions hashes are not null
+        for block in blocks:
+            for tx in block.transactions:
+                if tx.hash is None:
+                    raise RetriableValueError(f'{endpoint_url} returned null transaction hash')
         for block in blocks:
             self._export_block(block)
 
