@@ -63,11 +63,9 @@ class EndpointStatus():
             if self.err_code == 429 and self.fail_pass_time() > 60 * 10:
                 self.status = 'active'
                 return True
-            if self.err_code == 400 and self.fail_pass_time() > 60 * 5:
+            if self.err_code in [400, 500] and self.fail_pass_time() > 60 * 1:
                 self.status = 'active'
                 return True
-            if self.err_code == 500:
-                return False
         return False
 
     def fail(self, err_code: int):
