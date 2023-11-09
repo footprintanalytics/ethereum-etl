@@ -24,6 +24,8 @@
 import itertools
 from collections import defaultdict
 
+from ethereumetl.misc.retriable_value_error import RetriableValueError
+
 
 def join(left, right, join_fields, left_fields, right_fields):
     left_join_field, right_join_field = join_fields
@@ -216,6 +218,10 @@ def enrich_traces(blocks, traces):
 
     if len(result) != len(traces):
         raise ValueError('The number of traces is wrong ' + str(result))
+
+    blocks_transaction_count = sum(block['transaction_count'] for block in blocks)
+    if len(result) != blocks_transaction_count:
+        raise RetriableValueError('traces transactions count is wrong')
 
     return result
 
