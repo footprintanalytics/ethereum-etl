@@ -40,6 +40,7 @@ class KafkaItemExporter:
 
     def export_item(self, item):
         item_type = item.get('type')
+        # logging.info('kafka export item_type: {}'.format(item_type))
         if item_type is not None and item_type in self.item_type_to_topic_mapping:
             data = json.dumps(item).encode('utf-8')
             logging.debug(data)
