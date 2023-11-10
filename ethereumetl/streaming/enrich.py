@@ -219,8 +219,13 @@ def enrich_traces(blocks, traces):
     if len(result) != len(traces):
         raise ValueError('The number of traces is wrong ' + str(result))
 
+    traces_transaction_count = 0
+    for trace in traces:
+        if trace['trace_address'] == [] and trace['transaction_hash'] is not None:
+            traces_transaction_count += 1
+
     blocks_transaction_count = sum(block['transaction_count'] for block in blocks)
-    if len(result) != blocks_transaction_count:
+    if traces_transaction_count != blocks_transaction_count:
         raise RetriableValueError('traces transactions count is wrong')
 
     return result
