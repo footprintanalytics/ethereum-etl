@@ -23,6 +23,7 @@
 
 from ethereumetl.domain.block import EthBlock
 from ethereumetl.mappers.transaction_mapper import EthTransactionMapper
+from ethereumetl.misc.retriable_value_error import RetriableValueError
 from ethereumetl.utils import hex_to_dec, to_normalized_address
 
 
@@ -61,6 +62,11 @@ class EthBlockMapper(object):
                 for tx in json_dict['transactions']
                 if isinstance(tx, dict)
             ]
+
+            from_address = [tx.from_address for tx in block.transactions]
+            from_address = list(set(from_address))
+            if len(from_address) == 1 and from_address[0] == '0x0000000000000000000000000000000000000000':
+                raise RetriableValueError('Transactions within a block should not all be 0x0000000')
 
             block.transaction_count = len(json_dict['transactions'])
 
