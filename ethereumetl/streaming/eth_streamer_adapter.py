@@ -2,6 +2,7 @@ import logging
 
 from blockchainetl.jobs.exporters.console_item_exporter import ConsoleItemExporter
 from blockchainetl.jobs.exporters.in_memory_item_exporter import InMemoryItemExporter
+from ethereumetl.enumeration.chain_type import ChainType
 from ethereumetl.enumeration.entity_type import EntityType
 from ethereumetl.jobs.export_blocks_job import ExportBlocksJob
 from ethereumetl.jobs.export_geth_traces_job import ExportGethTracesJob
@@ -11,6 +12,7 @@ from ethereumetl.jobs.extract_contracts_job import ExtractContractsJob
 from ethereumetl.jobs.extract_geth_traces_job import ExtractGethTracesJob
 from ethereumetl.jobs.extract_token_transfers_job import ExtractTokenTransfersJob
 from ethereumetl.jobs.extract_tokens_job import ExtractTokensJob
+from ethereumetl.misc.retriable_value_error import RetriableValueError
 from ethereumetl.streaming.enrich import enrich_transactions, enrich_logs, enrich_token_transfers, enrich_traces, \
     enrich_contracts, enrich_tokens, enrich_geth_traces
 from ethereumetl.streaming.eth_item_id_calculator import EthItemIdCalculator
@@ -22,12 +24,14 @@ from ethereumetl.web3_utils import build_web3
 class EthStreamerAdapter:
     def __init__(
             self,
+            chain,
             batch_web3_provider,
             item_exporter=ConsoleItemExporter(),
             batch_size=100,
             max_workers=5,
             entity_types=tuple(EntityType.ALL_FOR_STREAMING),
             geth_traces_provider=None):
+        self.chain = chain
         self.batch_web3_provider = batch_web3_provider
         self.item_exporter = item_exporter
         self.batch_size = batch_size
@@ -87,7 +91,7 @@ class EthStreamerAdapter:
             if EntityType.LOG in self.entity_types else []
         enriched_token_transfers = enrich_token_transfers(blocks, token_transfers) \
             if EntityType.TOKEN_TRANSFER in self.entity_types else []
-        enriched_traces = enrich_traces(blocks, traces) \
+        enriched_traces = enrich_traces(blocks, traces, self.chain) \
             if EntityType.TRACE in self.entity_types else []
         enriched_geth_traces = enrich_geth_traces(blocks, transactions, geth_traces) \
             if EntityType.GETH_TRACES in self.entity_types else []
@@ -128,6 +132,27 @@ class EthStreamerAdapter:
         blocks_and_transactions_job.run()
         blocks = blocks_and_transactions_item_exporter.get_items('block')
         transactions = blocks_and_transactions_item_exporter.get_items('transaction')
+        # 将 transactions 按 block_number 分组
+        transaction_group = {}
+        for transaction in transactions:
+            block_number = transaction['block_number']
+            if self.chain == ChainType.POLYGON \
+                    and transaction['to_address'] == '0x0000000000000000000000000000000000000000':
+                continue
+            if transaction_group.get(block_number) is None:
+                transaction_group[block_number] = []
+            transaction_group[block_number].append(transaction['from_address'])
+            print(transaction_group[block_number])
+
+        for block in blocks:
+            block_number = block['number']
+            from_addresses = transaction_group[block_number]
+            from_addresses = list(set(from_addresses))
+            if len(from_addresses) == 1 and from_addresses[0] == '0x0000000000000000000000000000000000000000' \
+                    and block.transaction_count > 1:
+                raise RetriableValueError('Transactions within a block should not all be 0x0000000')
+
+
         return blocks, transactions
 
     def _export_receipts_and_logs(self, transactions):

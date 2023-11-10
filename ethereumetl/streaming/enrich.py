@@ -24,6 +24,7 @@
 import itertools
 from collections import defaultdict
 
+from ethereumetl.enumeration.chain_type import ChainType
 from ethereumetl.misc.retriable_value_error import RetriableValueError
 
 
@@ -132,7 +133,8 @@ def enrich_transactions(transactions, receipts):
 
     if len(result) != len(transactions):
         block_numbers = set([tx['block_number'] for tx in transactions])
-        raise ValueError(f'The number of transactions is wrong blocks:{block_numbers} result:{len(result)} transactions:{len(transactions)}')
+        raise ValueError(
+            f'The number of transactions is wrong blocks:{block_numbers} result:{len(result)} transactions:{len(transactions)}')
 
     return result
 
@@ -186,7 +188,7 @@ def enrich_token_transfers(blocks, token_transfers):
     return result
 
 
-def enrich_traces(blocks, traces):
+def enrich_traces(blocks, traces, chain=None):
     result = list(join(
         traces, blocks, ('block_number', 'number'),
         [
@@ -218,6 +220,10 @@ def enrich_traces(blocks, traces):
 
     if len(result) != len(traces):
         raise ValueError('The number of traces is wrong ' + str(result))
+
+    # polygon 不做这个检查
+    if chain == ChainType.POLYGON:
+        return result
 
     traces_transaction_count = 0
     for trace in traces:
