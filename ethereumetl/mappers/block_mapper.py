@@ -63,12 +63,13 @@ class EthBlockMapper(object):
                 if isinstance(tx, dict)
             ]
 
+            block.transaction_count = len(json_dict['transactions'])
+
             from_address = [tx.from_address for tx in block.transactions]
             from_address = list(set(from_address))
-            if len(from_address) == 1 and from_address[0] == '0x0000000000000000000000000000000000000000':
+            if len(from_address) == 1 and from_address[0] == '0x0000000000000000000000000000000000000000' \
+                    and block.transaction_count > 1:
                 raise RetriableValueError('Transactions within a block should not all be 0x0000000')
-
-            block.transaction_count = len(json_dict['transactions'])
 
         if 'withdrawals' in json_dict:
             block.withdrawals = self.parse_withdrawals(json_dict['withdrawals'])
