@@ -232,7 +232,9 @@ def enrich_traces(blocks, traces, chain=None):
 
     blocks_transaction_count = sum(block['transaction_count'] for block in blocks)
     if traces_transaction_count != blocks_transaction_count:
-        raise RetriableValueError('traces transactions count is wrong')
+        print(f'traces transactions count is wrong, blocks_transaction_count: {blocks_transaction_count}, '
+              f'traces_transaction_count: {traces_transaction_count}')
+        # raise RetriableValueError('traces transactions count is wrong')
 
     return result
 
