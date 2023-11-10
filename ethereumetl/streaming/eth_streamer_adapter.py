@@ -136,11 +136,11 @@ class EthStreamerAdapter:
         transaction_group = {}
         for transaction in transactions:
             block_number = transaction['block_number']
+            if transaction_group.get(block_number) is None:
+                transaction_group[block_number] = []
             if self.chain == ChainType.POLYGON \
                     and transaction['to_address'] == '0x0000000000000000000000000000000000000000':
                 continue
-            if transaction_group.get(block_number) is None:
-                transaction_group[block_number] = []
             transaction_group[block_number].append(transaction['from_address'])
 
         for block in blocks:
