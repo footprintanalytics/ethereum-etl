@@ -28,6 +28,7 @@ from ethereumetl.executors.batch_work_executor import BatchWorkExecutor
 from ethereumetl.json_rpc_requests import generate_get_receipt_json_rpc
 from ethereumetl.mappers.receipt_log_mapper import EthReceiptLogMapper
 from ethereumetl.mappers.receipt_mapper import EthReceiptMapper
+from ethereumetl.misc.retriable_value_error import RetriableValueError
 from ethereumetl.utils import rpc_response_batch_to_results
 
 
@@ -75,6 +76,8 @@ class ExportReceiptsJob(BaseJob):
             self.item_exporter.export_item(self.receipt_mapper.receipt_to_dict(receipt))
         if self.export_logs:
             for log in receipt.logs:
+                if log.data is None:
+                    raise RetriableValueError('Receipt log data is None')
                 self.item_exporter.export_item(self.receipt_log_mapper.receipt_log_to_dict(log))
 
     def _end(self):
