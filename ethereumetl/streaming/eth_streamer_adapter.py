@@ -142,7 +142,6 @@ class EthStreamerAdapter:
             if transaction_group.get(block_number) is None:
                 transaction_group[block_number] = []
             transaction_group[block_number].append(transaction['from_address'])
-            print(transaction_group[block_number])
 
         for block in blocks:
             block_number = block['number']
