@@ -145,7 +145,7 @@ class EthStreamerAdapter:
 
         for block in blocks:
             block_number = block['number']
-            from_addresses = transaction_group[block_number]
+            from_addresses = transaction_group.get(block_number, [])
             from_addresses = list(set(from_addresses))
             if len(from_addresses) == 1 and from_addresses[0] == '0x0000000000000000000000000000000000000000' \
                     and block.transaction_count > 1:
