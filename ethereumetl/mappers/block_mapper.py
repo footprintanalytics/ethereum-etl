@@ -55,6 +55,7 @@ class EthBlockMapper(object):
         block.timestamp = hex_to_dec(json_dict.get('timestamp'))
         block.base_fee_per_gas = hex_to_dec(json_dict.get('baseFeePerGas'))
         block.withdrawals_root = json_dict.get('withdrawalsRoot')
+        block.transaction_count = len(json_dict['transactions'])
 
         if 'transactions' in json_dict:
             block.transactions = [

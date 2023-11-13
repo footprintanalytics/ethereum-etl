@@ -149,7 +149,8 @@ class EthStreamerAdapter:
             from_addresses = list(set(from_addresses))
             if len(from_addresses) == 1 and from_addresses[0] == '0x0000000000000000000000000000000000000000' \
                     and block.transaction_count > 1:
-                raise RetriableValueError('Transactions within a block should not all be 0x0000000')
+                raise RetriableValueError(f'Transactions within a block should not all be 0x0000000, '
+                                          f'block_number: {block_number}')
 
 
         return blocks, transactions
