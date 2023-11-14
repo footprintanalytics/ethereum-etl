@@ -275,8 +275,13 @@ def enrich_geth_traces(blocks, transactions, traces):
         traces_blocks, transactions, (['block_number', 'transaction_index'], ['block_number', 'transaction_index']),
         traces_fields + ['block_timestamp', 'block_hash'],
         [
-            'transaction_hash'
+            ('hash', 'transaction_hash'),
+            'transaction_index',
         ]))
+
+    for trace in result:
+        if trace['transaction_index'] is None or trace['transaction_hash'] is None:
+            raise ValueError('The number of traces is wrong ' + str(result))
 
     if len(result) != len(traces):
         raise ValueError(

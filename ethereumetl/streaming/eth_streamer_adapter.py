@@ -177,8 +177,8 @@ class EthStreamerAdapter:
         def verify_token_transfers(logs, token_transfers):
             token_transfers_in_logs_count = 0
             receipt_log_mapper = EthReceiptLogMapper()
-            for log in logs:
-                log = receipt_log_mapper.dict_to_receipt_log(log)
+            for log_dict in logs:
+                log = receipt_log_mapper.dict_to_receipt_log(log_dict)
                 topics = log.topics
                 if topics is None or len(topics) < 1:
                     continue
