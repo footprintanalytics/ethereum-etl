@@ -13,6 +13,7 @@ from ethereumetl.jobs.extract_geth_traces_job import ExtractGethTracesJob
 from ethereumetl.jobs.extract_token_transfers_job import ExtractTokenTransfersJob
 from ethereumetl.jobs.extract_tokens_job import ExtractTokensJob
 from ethereumetl.misc.retriable_value_error import RetriableValueError
+from ethereumetl.service.token_transfer_extractor import TRANSFER_EVENT_TOPIC
 from ethereumetl.streaming.enrich import enrich_transactions, enrich_logs, enrich_token_transfers, enrich_traces, \
     enrich_contracts, enrich_tokens, enrich_geth_traces
 from ethereumetl.streaming.eth_item_id_calculator import EthItemIdCalculator
@@ -180,6 +181,14 @@ class EthStreamerAdapter:
             item_exporter=exporter)
         job.run()
         token_transfers = exporter.get_items('token_transfer')
+        token_transfers_in_logs_count = 0
+        for log in logs:
+            if log['topics'][0] == TRANSFER_EVENT_TOPIC:
+                token_transfers_in_logs_count += 1
+        if len(token_transfers) != token_transfers_in_logs_count:
+            raise RuntimeError('Token transfers count mismatch: '
+                               'token_transfers={}, token_transfers_in_logs={}'.format(
+                len(token_transfers), token_transfers_in_logs_count))
         return token_transfers
 
     def _export_traces(self, start_block, end_block):
