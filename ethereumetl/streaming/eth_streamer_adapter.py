@@ -141,6 +141,9 @@ class EthStreamerAdapter:
             if self.chain == ChainType.POLYGON \
                     and transaction['to_address'] == '0x0000000000000000000000000000000000000000':
                 continue
+            if self.chain == ChainType.FANTOM \
+                    and transaction['to_address'] == '0xd100a01e00000000000000000000000000000000':
+                continue
             transaction_group[block_number].append(transaction['from_address'])
 
         for block in blocks:
