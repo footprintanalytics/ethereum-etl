@@ -279,10 +279,6 @@ def enrich_geth_traces(blocks, transactions, traces):
             'transaction_index',
         ]))
 
-    for trace in result:
-        if trace['transaction_index'] is None or trace['transaction_hash'] is None:
-            raise ValueError('The number of traces is wrong ' + str(result))
-
     if len(result) != len(traces):
         raise ValueError(
             f'The number of traces is wrong blocks:{len(blocks)} transactions:{len(traces)} traces:{len(traces)} result:{len(result)}')
