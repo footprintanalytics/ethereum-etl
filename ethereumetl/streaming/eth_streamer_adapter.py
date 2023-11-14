@@ -12,7 +12,9 @@ from ethereumetl.jobs.extract_contracts_job import ExtractContractsJob
 from ethereumetl.jobs.extract_geth_traces_job import ExtractGethTracesJob
 from ethereumetl.jobs.extract_token_transfers_job import ExtractTokenTransfersJob
 from ethereumetl.jobs.extract_tokens_job import ExtractTokensJob
+from ethereumetl.mappers.receipt_log_mapper import EthReceiptLogMapper
 from ethereumetl.misc.retriable_value_error import RetriableValueError
+from ethereumetl.service.token_transfer_extractor import TRANSFER_EVENT_TOPIC
 from ethereumetl.streaming.enrich import enrich_transactions, enrich_logs, enrich_token_transfers, enrich_traces, \
     enrich_contracts, enrich_tokens, enrich_geth_traces
 from ethereumetl.streaming.eth_item_id_calculator import EthItemIdCalculator
@@ -151,8 +153,9 @@ class EthStreamerAdapter:
             from_addresses = transaction_group.get(block_number, [])
             from_addresses = list(set(from_addresses))
             if len(from_addresses) == 1 and from_addresses[0] == '0x0000000000000000000000000000000000000000' \
-                    and block.transaction_count > 1:
-                raise RetriableValueError('Transactions within a block should not all be 0x0000000')
+                    and block['transaction_count'] > 1:
+                raise RetriableValueError(f'Transactions within a block should not all be 0x0000000, '
+                                          f'block_number: {block_number}')
 
 
         return blocks, transactions
@@ -174,6 +177,21 @@ class EthStreamerAdapter:
         return receipts, logs
 
     def _extract_token_transfers(self, logs):
+        def verify_token_transfers(logs, token_transfers):
+            token_transfers_in_logs_count = 0
+            receipt_log_mapper = EthReceiptLogMapper()
+            for log_dict in logs:
+                log = receipt_log_mapper.dict_to_receipt_log(log_dict)
+                topics = log.topics
+                if topics is None or len(topics) < 1:
+                    continue
+                if (topics[0]).casefold() == TRANSFER_EVENT_TOPIC:
+                    token_transfers_in_logs_count += 1
+            if len(token_transfers) != token_transfers_in_logs_count:
+                raise RuntimeError('Token transfers count mismatch: '
+                                   'token_transfers={}, token_transfers_in_logs={}'.format(
+                    len(token_transfers), token_transfers_in_logs_count))
+
         exporter = InMemoryItemExporter(item_types=['token_transfer'])
         job = ExtractTokenTransfersJob(
             logs_iterable=logs,
@@ -182,6 +200,7 @@ class EthStreamerAdapter:
             item_exporter=exporter)
         job.run()
         token_transfers = exporter.get_items('token_transfer')
+        verify_token_transfers(logs, token_transfers)
         return token_transfers
 
     def _export_traces(self, start_block, end_block):
