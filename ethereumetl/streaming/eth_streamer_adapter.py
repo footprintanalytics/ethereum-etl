@@ -134,8 +134,10 @@ class EthStreamerAdapter:
         blocks_and_transactions_job.run()
         blocks = blocks_and_transactions_item_exporter.get_items('block')
         transactions = blocks_and_transactions_item_exporter.get_items('transaction')
-        self.verify_transaction_from_address_nonce(blocks, transactions)
-        self.verify_transaction_count(blocks, transactions)
+
+        if EntityType.TRANSACTION in self.entity_types:
+            self.verify_transaction_from_address_nonce(blocks, transactions)
+            self.verify_transaction_count(blocks, transactions)
 
         return blocks, transactions
 
