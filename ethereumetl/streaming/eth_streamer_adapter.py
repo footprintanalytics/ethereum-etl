@@ -134,6 +134,12 @@ class EthStreamerAdapter:
         blocks_and_transactions_job.run()
         blocks = blocks_and_transactions_item_exporter.get_items('block')
         transactions = blocks_and_transactions_item_exporter.get_items('transaction')
+        self.verify_transaction_from_address_nonce(blocks, transactions)
+        self.verify_transaction_count(blocks, transactions)
+
+        return blocks, transactions
+
+    def verify_transaction_from_address_nonce(self, blocks, transactions):
         # 将 transactions 按 block_number 分组
         transaction_group = {}
         for transaction in transactions:
@@ -154,8 +160,15 @@ class EthStreamerAdapter:
                 raise RetriableValueError(f'Transactions within a block should not all be 0x0000000, '
                                           f'block_number: {block_number}')
 
+    def verify_transaction_count(self, blocks, transactions):
+        blocks_transaction_count = 0
+        for block in blocks:
+            blocks_transaction_count += block['transaction_count']
+        if blocks_transaction_count != len(transactions):
+            raise RetriableValueError(f'Transaction count mismatch, '
+                                      f'blocks_transaction_count: {blocks_transaction_count}, '
+                                      f'transactions_count: {len(transactions)}')
 
-        return blocks, transactions
 
     def _export_receipts_and_logs(self, transactions):
         exporter = InMemoryItemExporter(item_types=['receipt', 'log'])
