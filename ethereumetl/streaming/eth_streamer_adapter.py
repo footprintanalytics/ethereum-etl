@@ -14,6 +14,7 @@ from ethereumetl.jobs.extract_token_transfers_job import ExtractTokenTransfersJo
 from ethereumetl.jobs.extract_tokens_job import ExtractTokensJob
 from ethereumetl.mappers.receipt_log_mapper import EthReceiptLogMapper
 from ethereumetl.misc.retriable_value_error import RetriableValueError
+from ethereumetl.providers.multi_batch_rpc import BatchMultiHTTPProvider
 from ethereumetl.service.token_transfer_extractor import TRANSFER_EVENT_TOPIC
 from ethereumetl.streaming.enrich import enrich_transactions, enrich_logs, enrich_token_transfers, enrich_traces, \
     enrich_contracts, enrich_tokens, enrich_geth_traces
@@ -47,6 +48,10 @@ class EthStreamerAdapter:
         self.item_exporter.open()
 
     def get_current_block_number(self):
+        if isinstance(self.batch_web3_provider, ThreadLocalProxy):
+            http_provider = self.batch_web3_provider._get_thread_local_delegate()
+            if isinstance(http_provider, BatchMultiHTTPProvider):
+                http_provider.endpoint_uri = http_provider.endpoint_manager.get_next_active_endpoint().endpoint_url
         w3 = build_web3(self.batch_web3_provider)
         return int(w3.eth.getBlock("latest").number)
 
