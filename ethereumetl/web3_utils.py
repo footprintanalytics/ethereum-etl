@@ -23,8 +23,15 @@
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
 
+from ethereumetl.providers.multi_batch_rpc import BatchMultiHTTPProvider
+from ethereumetl.thread_local_proxy import ThreadLocalProxy
+
 
 def build_web3(provider):
+    if isinstance(provider, ThreadLocalProxy):
+        http_provider = provider._get_thread_local_delegate()
+        if isinstance(http_provider, BatchMultiHTTPProvider):
+            http_provider.endpoint_uri = http_provider.endpoint_manager.get_next_active_endpoint().endpoint_url
     w3 = Web3(provider)
     w3.middleware_onion.inject(geth_poa_middleware, layer=0)
     return w3

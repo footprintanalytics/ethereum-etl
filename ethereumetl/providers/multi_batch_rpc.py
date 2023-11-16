@@ -110,15 +110,6 @@ class EndpointManager():
             self.logger.info("not active endpoints %s ", '\n'.join(not_active_))
 
 
-def is_continuous(numbers):
-    sorted_numbers = sorted(numbers)
-
-    for i in range(1, len(sorted_numbers)):
-        if sorted_numbers[i] != sorted_numbers[i - 1] + 1:
-            return False
-
-    return True
-
 # Mostly copied from web3.py/providers/rpc.py. Supports batch requests.
 # Will be removed once batch feature is added to web3.py https://github.com/ethereum/web3.py/issues/832
 class BatchMultiHTTPProvider(HTTPProvider):
@@ -154,12 +145,7 @@ class BatchMultiHTTPProvider(HTTPProvider):
                     raise ValueError(self.endpoint.endpoint_url + ' not support json rpc ' + response_item)
                 result = response_item.get('result')
                 if result is None:
-                    raise ValueError(self.endpoint.endpoint_url + ' not support json rpc')
-                # block_number = result.get('blockNumber')
-                # if block_number is not None:
-                #     block_numbers.add(hex_to_dec(block_number))
-            # if not is_continuous(block_numbers):
-            #     self.logger.warning('%s endpoint block_numbers is wrong %s', self.endpoint.endpoint_url, block_numbers)
+                    raise ValueError(self.endpoint.endpoint_url + ' return none data ' + str(response_item))
             return response, self.endpoint.endpoint_url
         except Exception as error:  # pylint: disable=W0703
             self.logger.warning(
@@ -172,9 +158,8 @@ class BatchMultiHTTPProvider(HTTPProvider):
             error_code = 400
             if 'Too Many Requests' in str(error):
                 error_code = 429
-            if 'not support json rpc' in str(error):
+            if 'not support json rpc' in str(error) or 'return none data' in str(error):
                 error_code = 500
             self.endpoint.fail(error_code)
-            self.endpoint = self.endpoint_manager.get_next_active_endpoint()
 
             return self.make_batch_request(text)
