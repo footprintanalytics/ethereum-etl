@@ -163,20 +163,11 @@ class EthStreamerAdapter:
 
         for block in blocks:
             block_number = block['number']
-            from_address_list = transaction_group.get(block_number, [])
-            from_address_set = list(set(from_address_list))
-            if len(from_address_set) == 1 and from_address_set[0] == '0x0000000000000000000000000000000000000000' \
+            from_addresses = transaction_group.get(block_number, [])
+            from_addresses = list(set(from_addresses))
+            if len(from_addresses) == 1 and from_addresses[0] == '0x0000000000000000000000000000000000000000' \
                     and block['transaction_count'] > 1:
                 raise RetriableValueError(f'Transactions within a block should not all be 0x0000000, '
-                                          f'block_number: {block_number}')
-            # 判断 from_address_list 里 0x0000000000000000000000000000000000000000 的占比
-            nonce_address_count = 0
-            for from_address in from_address_list:
-                if from_address == '0x0000000000000000000000000000000000000000':
-                    nonce_address_count += 1
-            # 如果 0x000 个数占比超过 50%，则报错重试
-            if nonce_address_count / len(from_address_list) > 0.5:
-                raise RetriableValueError(f'Transactions within a block should not have more than 50% 0x0000000, '
                                           f'block_number: {block_number}')
 
     def verify_transaction_count(self, blocks, transactions):
