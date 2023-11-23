@@ -22,6 +22,8 @@
 
 from collections import defaultdict
 
+from ethereumetl.misc.retriable_value_error import RetriableValueError
+
 
 def calculate_trace_ids(traces):
     # group by block
@@ -37,6 +39,9 @@ def calculate_trace_ids(traces):
         block_scoped_traces = [trace for trace in block_traces if not trace.transaction_hash]
         calculate_block_scoped_trace_ids(block_scoped_traces)
 
+    for trace in traces:
+        if trace.trace_id is None:
+            raise RetriableValueError(f"trace_id is None for trace, block_number={trace.block_number}")
     return traces
 
 
