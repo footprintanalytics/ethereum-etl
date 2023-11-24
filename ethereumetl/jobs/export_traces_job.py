@@ -25,11 +25,13 @@ from ethereumetl.executors.batch_work_executor import BatchWorkExecutor
 from blockchainetl.jobs.base_job import BaseJob
 from ethereumetl.mainnet_daofork_state_changes import DAOFORK_BLOCK_NUMBER
 from ethereumetl.mappers.trace_mapper import EthTraceMapper
+from ethereumetl.providers.multi_batch_rpc import get_multi_provider_from_thread_proxy
 from ethereumetl.service.eth_special_trace_service import EthSpecialTraceService
 
 from ethereumetl.service.trace_id_calculator import calculate_trace_ids
 from ethereumetl.service.trace_status_calculator import calculate_trace_statuses
 from ethereumetl.utils import validate_range
+from ethereumetl.web3_utils import build_web3
 
 
 class ExportTracesJob(BaseJob):
@@ -42,7 +44,9 @@ class ExportTracesJob(BaseJob):
             item_exporter,
             max_workers,
             include_genesis_traces=False,
-            include_daofork_traces=False):
+            include_daofork_traces=False,
+            web3_provider=None
+    ):
         validate_range(start_block, end_block)
         self.start_block = start_block
         self.end_block = end_block
@@ -58,6 +62,7 @@ class ExportTracesJob(BaseJob):
         self.special_trace_service = EthSpecialTraceService()
         self.include_genesis_traces = include_genesis_traces
         self.include_daofork_traces = include_daofork_traces
+        self.web3_provider = get_multi_provider_from_thread_proxy(web3_provider)
 
     def _start(self):
         self.item_exporter.open()
@@ -68,6 +73,17 @@ class ExportTracesJob(BaseJob):
             self._export_batch,
             total_items=self.end_block - self.start_block + 1
         )
+
+    def choose_provider(self):
+        if self.web3_provider is None:
+            return
+        self.web3_provider.endpoint_uri = self.web3_provider.endpoint_manager.get_next_active_endpoint().endpoint_url
+        self.web3 = build_web3(self.web3_provider)
+
+    def mark_failed_provider(self):
+        if self.web3_provider is None:
+            return
+        self.web3_provider.endpoint_manager.endpoint.fail(500)
 
     def _export_batch(self, block_number_batch):
         # TODO: Change to len(block_number_batch) > 0 when this issue is fixed
@@ -87,10 +103,16 @@ class ExportTracesJob(BaseJob):
 
         # TODO: Change to traceFilter when this issue is fixed
         # https://github.com/paritytech/parity-ethereum/issues/9822
-        json_traces = self.web3.parity.traceBlock(block_number)
+        try:
+            self.choose_provider()
+            json_traces = self.web3.parity.traceBlock(block_number)
+        except Exception as e:
+            self.mark_failed_provider()
+            raise e
 
         if json_traces is None:
-            raise ValueError('Response from the node is None. Is the node fully synced? Is the node started with tracing enabled? Is trace_block API enabled?')
+            raise ValueError(
+                'Response from the node is None. Is the node fully synced? Is the node started with tracing enabled? Is trace_block API enabled?')
 
         traces = [self.trace_mapper.json_dict_to_trace(json_trace) for json_trace in json_traces]
         all_traces.extend(traces)

@@ -240,7 +240,8 @@ class EthStreamerAdapter:
             batch_size=self.batch_size,
             web3=ThreadLocalProxy(lambda: build_web3(self.batch_web3_provider)),
             max_workers=self.max_workers,
-            item_exporter=exporter
+            item_exporter=exporter,
+            web3_provider=self.batch_web3_provider
         )
         job.run()
         traces = exporter.get_items('trace')

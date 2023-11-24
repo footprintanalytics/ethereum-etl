@@ -34,6 +34,7 @@ from eth_typing import (
 from web3 import HTTPProvider
 from web3._utils.request import make_post_request
 
+from ethereumetl.thread_local_proxy import ThreadLocalProxy
 from ethereumetl.utils import hex_to_dec
 
 lock = threading.Lock()
@@ -163,3 +164,10 @@ class BatchMultiHTTPProvider(HTTPProvider):
             self.endpoint.fail(error_code)
 
             return self.make_batch_request(text)
+
+
+def get_multi_provider_from_thread_proxy(thread_proxy):
+    if thread_proxy and isinstance(thread_proxy, ThreadLocalProxy):
+        http_provider = thread_proxy._get_thread_local_delegate()
+        if isinstance(http_provider, BatchMultiHTTPProvider):
+            return http_provider
