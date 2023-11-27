@@ -217,7 +217,7 @@ class EthStreamerAdapter:
                 if (topics[0]).casefold() == TRANSFER_EVENT_TOPIC:
                     token_transfers_in_logs_count += 1
             if len(token_transfers) != token_transfers_in_logs_count:
-                raise RuntimeError('Token transfers count mismatch: '
+                raise RetriableValueError('Token transfers count mismatch: '
                                    'token_transfers={}, token_transfers_in_logs={}'.format(
                     len(token_transfers), token_transfers_in_logs_count))
 
