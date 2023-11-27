@@ -76,8 +76,10 @@ class ExportBlocksJob(BaseJob):
         response = self.batch_web3_provider.make_batch_request(json.dumps(blocks_rpc))
         results = rpc_response_batch_to_results(response)
         blocks = [self.block_mapper.json_dict_to_block(result) for result in results]
-        # Validate transactions hashes are not null
         for block in blocks:
+            if block.transactions and block.transactions and block.transaction_count != len(block.transactions):
+                raise RetriableValueError(f'block.transaction_count {block.transaction_count} != len('
+                                          f'block.transactions) {len(block.transactions)}')
             for tx in block.transactions:
                 if tx.hash is None:
                     raise RetriableValueError(f'returned null transaction hash')
