@@ -33,6 +33,7 @@ from eth_typing import (
 )
 from web3 import HTTPProvider
 from web3._utils.request import make_post_request
+from web3.types import RPCEndpoint, RPCResponse
 
 from ethereumetl.utils import hex_to_dec
 
@@ -82,8 +83,8 @@ class EndpointManager():
     _last_working_provider_index: int = 0
 
     def __init__(self, endpoint_urls: List[Union[URI, str]]) -> None:
-        self._hosts_uri = endpoint_urls
-        self._endpoints_len = len(self._hosts_uri)
+        self.hosts_uris = endpoint_urls
+        self._endpoints_len = len(self.hosts_uris)
         self._endpoints = [EndpointStatus(endpoint_url) for index, endpoint_url in enumerate(endpoint_urls)]
         self.endpoint = self._endpoints[0]
         self.endpoint_uri = self.endpoint.endpoint_url
@@ -121,6 +122,12 @@ class BatchMultiHTTPProvider(HTTPProvider):
         super().__init__(endpoint_manager.endpoint_uri, request_kwargs, session)
         self.endpoint_manager = endpoint_manager
         self.endpoint = self.endpoint_manager.get_next_active_endpoint()
+        self._providers = dict()
+
+        for host_uri in endpoint_manager.hosts_uris:
+            if host_uri.startswith("http"):
+                _provider = HTTPProvider(host_uri, request_kwargs, session)
+                self._providers[host_uri] = _provider
 
     def make_batch_request(self, text):
         # self.logger.info("Making request HTTP. URI: %s ",self.endpoint.endpoint_url)
@@ -163,3 +170,31 @@ class BatchMultiHTTPProvider(HTTPProvider):
             self.endpoint.fail(error_code)
 
             return self.make_batch_request(text)
+
+    def make_request(self, method: RPCEndpoint, params: Any) -> RPCResponse:
+
+        self.endpoint = self.endpoint_manager.get_next_active_endpoint()
+        provider = self._providers[self.endpoint.endpoint_url]
+        try:
+            response = provider.make_request(method, params)
+        except Exception as error:
+            self.logger.warning(
+                {
+                    "msg": "Provider not responding.",
+                    "error": str(error),
+                    "provider": provider.endpoint_uri,
+                }
+            )
+            self.endpoint.fail(400)
+            return self.make_request(method, params)
+        else:
+            # self._sanitize_poa_response(method, response)
+            self.logger.debug(
+                {
+                    "msg": "Send request using MultiProvider.",
+                    "method": method,
+                    "params": str(params),
+                    "provider": provider.endpoint_uri,
+                }
+            )
+            return response
