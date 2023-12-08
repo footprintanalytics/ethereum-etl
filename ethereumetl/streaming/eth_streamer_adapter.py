@@ -134,15 +134,13 @@ class EthStreamerAdapter:
             max_workers=self.max_workers,
             item_exporter=blocks_and_transactions_item_exporter,
             export_blocks=self._should_export(EntityType.BLOCK),
-            export_transactions=self._should_export(EntityType.TRANSACTION)
+            export_transactions=self._should_export(EntityType.TRANSACTION),
+            chain=self.chain
         )
         blocks_and_transactions_job.run()
         blocks = blocks_and_transactions_item_exporter.get_items('block')
         transactions = blocks_and_transactions_item_exporter.get_items('transaction')
 
-        if EntityType.TRANSACTION in self.entity_types:
-            self.verify_transaction_from_address_nonce(blocks, transactions)
-            self.verify_transaction_count(blocks, transactions)
 
         return blocks, transactions
 

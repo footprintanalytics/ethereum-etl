@@ -23,6 +23,7 @@
 
 import json
 
+from ethereumetl.enumeration.chain_type import ChainType
 from ethereumetl.executors.batch_work_executor import BatchWorkExecutor
 from blockchainetl.jobs.base_job import BaseJob
 from ethereumetl.json_rpc_requests import generate_get_block_by_number_json_rpc
@@ -43,7 +44,8 @@ class ExportBlocksJob(BaseJob):
             max_workers,
             item_exporter,
             export_blocks=True,
-            export_transactions=True):
+            export_transactions=True,
+            chain=ChainType.ETHEREUM):
         validate_range(start_block, end_block)
         self.start_block = start_block
         self.end_block = end_block
@@ -60,6 +62,7 @@ class ExportBlocksJob(BaseJob):
 
         self.block_mapper = EthBlockMapper()
         self.transaction_mapper = EthTransactionMapper()
+        self.chain = chain
 
     def _start(self):
         self.item_exporter.open()
@@ -76,13 +79,7 @@ class ExportBlocksJob(BaseJob):
         response = self.batch_web3_provider.make_batch_request(json.dumps(blocks_rpc))
         results = rpc_response_batch_to_results(response)
         blocks = [self.block_mapper.json_dict_to_block(result) for result in results]
-        for block in blocks:
-            if block.transactions and block.transactions and block.transaction_count != len(block.transactions):
-                raise RetriableValueError(f'block.transaction_count {block.transaction_count} != len('
-                                          f'block.transactions) {len(block.transactions)}')
-            for tx in block.transactions:
-                if tx.hash is None:
-                    raise RetriableValueError(f'returned null transaction hash')
+        self.verify_blocks(blocks)
         for block in blocks:
             self._export_block(block)
 
@@ -90,8 +87,54 @@ class ExportBlocksJob(BaseJob):
         if self.export_blocks:
             self.item_exporter.export_item(self.block_mapper.block_to_dict(block))
         if self.export_transactions:
+            self.verify_transactions(block, block.transactions)
             for tx in block.transactions:
                 self.item_exporter.export_item(self.transaction_mapper.transaction_to_dict(tx))
+
+    def verify_blocks(self, blocks):
+        min_block_number = min([block.number for block in blocks])
+        max_block_number = max([block.number for block in blocks])
+        if len(blocks) != max_block_number - min_block_number + 1:
+            raise RetriableValueError(f'len(blocks) {len(blocks)} != max_block_number - min_block_number + 1 '
+                                      f'{max_block_number - min_block_number + 1}')
+
+    def verify_transactions(self, block, transactions):
+        if block.transactions is None:
+            return
+        self.verify_transaction_conut(block)
+        self.verify_transaction_from_address_nonce(block, transactions)
+
+    def verify_transaction_conut(self, block):
+        if block.transaction_count != len(block.transactions):
+            raise RetriableValueError(f'block.transaction_count {block.transaction_count} != len('
+                                      f'block.transactions) {len(block.transactions)}')
+
+    def verify_transaction_from_address_nonce(self, block, transactions):
+        if len(transactions) <= 1:
+            return
+        from_address_list = []
+        for transaction in transactions:
+            if self.chain == ChainType.POLYGON \
+                    and transaction.to_address == '0x0000000000000000000000000000000000000000':
+                continue
+            if self.chain == ChainType.FANTOM \
+                    and transaction.to_address == '0xd100a01e00000000000000000000000000000000':
+                continue
+            from_address_list.append(transaction.from_address)
+        from_address_set = list(set(from_address_list))
+        if len(from_address_set) == 1 and from_address_set[0] == '0x0000000000000000000000000000000000000000' \
+                and block.transaction_count > 1:
+            raise RetriableValueError(f'Transactions within a block should not all be 0x0000000, '
+                                      f'block_number: {block.number}')
+        # 同一个 block 内 from_address 是 0x0000 的数量超过 50% 时，则此 block 为异常 block
+        nonce_address_count = 0
+        for from_address in from_address_list:
+            if from_address == '0x0000000000000000000000000000000000000000':
+                nonce_address_count += 1
+        if len(from_address_list) > 0 and nonce_address_count / len(
+                from_address_list) > 0.5 and block.transaction_count > 1:
+            raise RetriableValueError(f'Transactions within a block should not have more than 50% 0x0000000, '
+                                      f'block_number: {block.number}')
 
     def _end(self):
         self.batch_work_executor.shutdown()
