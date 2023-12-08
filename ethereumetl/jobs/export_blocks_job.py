@@ -132,7 +132,7 @@ class ExportBlocksJob(BaseJob):
             if from_address == '0x0000000000000000000000000000000000000000':
                 nonce_address_count += 1
         if len(from_address_list) > 0 and nonce_address_count / len(
-                from_address_list) > 0.5 and block.transaction_count > 1:
+                from_address_list) > 0.5 and block.transaction_count > 10:
             raise RetriableValueError(f'Transactions within a block should not have more than 50% 0x0000000, '
                                       f'block_number: {block.number}')
 
