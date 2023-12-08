@@ -87,7 +87,7 @@ class ExportBlocksJob(BaseJob):
         if self.export_blocks:
             self.item_exporter.export_item(self.block_mapper.block_to_dict(block))
         if self.export_transactions:
-            self.verify_transactions(block, block.transactions)
+            self.verify_transactions(block)
             for tx in block.transactions:
                 self.item_exporter.export_item(self.transaction_mapper.transaction_to_dict(tx))
 
@@ -98,20 +98,19 @@ class ExportBlocksJob(BaseJob):
             raise RetriableValueError(f'len(blocks) {len(blocks)} != max_block_number - min_block_number + 1 '
                                       f'{max_block_number - min_block_number + 1}')
 
-    def verify_transactions(self, block, transactions):
-        if block.transactions is None:
-            return
+    def verify_transactions(self, block):
         self.verify_transaction_conut(block)
-        self.verify_transaction_from_address_nonce(block, transactions)
+        self.verify_transaction_from_address_nonce(block)
 
     def verify_transaction_conut(self, block):
         if block.transaction_count != len(block.transactions):
             raise RetriableValueError(f'block.transaction_count {block.transaction_count} != len('
                                       f'block.transactions) {len(block.transactions)}')
 
-    def verify_transaction_from_address_nonce(self, block, transactions):
-        if len(transactions) <= 1:
+    def verify_transaction_from_address_nonce(self, block):
+        if block.transaction_count <= 1:
             return
+        transactions = block.transactions
         from_address_list = []
         for transaction in transactions:
             if self.chain == ChainType.POLYGON \
