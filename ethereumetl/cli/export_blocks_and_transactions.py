@@ -62,5 +62,7 @@ def export_blocks_and_transactions(start_block, end_block, batch_size, provider_
         max_workers=max_workers,
         item_exporter=blocks_and_transactions_item_exporter(blocks_output, transactions_output),
         export_blocks=blocks_output is not None,
-        export_transactions=transactions_output is not None)
+        export_transactions=transactions_output is not None,
+        chain=chain
+    )
     job.run()
