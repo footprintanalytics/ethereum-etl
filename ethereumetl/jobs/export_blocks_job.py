@@ -99,8 +99,19 @@ class ExportBlocksJob(BaseJob):
                                       f'{max_block_number - min_block_number + 1}')
 
     def verify_transactions(self, block):
+        self.verify_transaction_unique(block)
         self.verify_transaction_conut(block)
         self.verify_transaction_from_address_nonce(block)
+
+    def verify_transaction_unique(self, block):
+        transactions = block.transactions
+        transaction_hash_list = []
+        for transaction in transactions:
+            transaction_hash_list.append(transaction.hash)
+        transaction_hash_set = list(set(transaction_hash_list))
+        if len(transaction_hash_set) != len(transaction_hash_list):
+            raise RetriableValueError(f'Transaction hash is not unique, '
+                                      f'block_number: {block.number}')
 
     def verify_transaction_conut(self, block):
         if block.transaction_count != len(block.transactions):
