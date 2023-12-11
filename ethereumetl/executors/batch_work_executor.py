@@ -33,7 +33,7 @@ from ethereumetl.progress_logger import ProgressLogger
 from ethereumetl.utils import dynamic_batch_iterator
 
 RETRY_EXCEPTIONS = (ConnectionError, HTTPError, RequestsTimeout, TooManyRedirects, Web3Timeout, OSError,
-                    RetriableValueError)
+                    RetriableValueError, ValueError)
 
 BATCH_CHANGE_COOLDOWN_PERIOD_SECONDS = 2 * 60
 
