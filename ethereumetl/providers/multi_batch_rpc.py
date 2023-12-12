@@ -153,6 +153,7 @@ class BatchMultiHTTPProvider(HTTPProvider):
                 result = response_item.get('result')
                 if result is None:
                     raise ValueError(self.endpoint.endpoint_url + ' return none data ' + str(response_item))
+                response_item['rpc'] = self.endpoint.endpoint_url
             return response
         except Exception as error:  # pylint: disable=W0703
             self.logger.warning(
