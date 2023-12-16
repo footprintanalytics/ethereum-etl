@@ -30,6 +30,8 @@ from ethereumetl.misc.retriable_value_error import RetriableValueError
 def hex_to_dec(hex_string):
     if hex_string is None:
         return None
+    if type(hex_string) is int:
+        return hex_string
     try:
         return int(hex_string, 16)
     except ValueError:
