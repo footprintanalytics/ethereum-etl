@@ -37,7 +37,12 @@ class EthReceiptMapper(object):
         receipt = EthReceipt()
 
         receipt.transaction_hash = json_dict.get('transactionHash')
-        receipt.transaction_index = hex_to_dec(json_dict.get('transactionIndex'))
+        transaction_index = json_dict.get('transactionIndex')
+        if isinstance(transaction_index, str) and transaction_index.startswith('0x'):
+            receipt.transaction_index = hex_to_dec(transaction_index)
+        else:
+            receipt.transaction_index = int(transaction_index)
+        receipt.block_hash = json_dict.get('blockHash')
         receipt.block_hash = json_dict.get('blockHash')
         receipt.block_number = hex_to_dec(json_dict.get('blockNumber'))
         receipt.cumulative_gas_used = hex_to_dec(json_dict.get('cumulativeGasUsed'))
