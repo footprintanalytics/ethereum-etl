@@ -109,4 +109,4 @@ def execute_with_retries(func, *args, max_retries=5, retry_exceptions=RETRY_EXCE
                 time.sleep(sleep_seconds)
                 continue
             else:
-                raise
+                print("Retry exception, skip")
