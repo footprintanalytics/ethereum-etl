@@ -44,7 +44,8 @@ BLOCK_FIELDS_TO_EXPORT = [
     'transaction_count',
     'base_fee_per_gas',
     'withdrawals_root',
-    'withdrawals'
+    'withdrawals',
+    'rpc'
 ]
 
 TRANSACTION_FIELDS_TO_EXPORT = [
@@ -62,7 +63,8 @@ TRANSACTION_FIELDS_TO_EXPORT = [
     'block_timestamp',
     'max_fee_per_gas',
     'max_priority_fee_per_gas',
-    'transaction_type'
+    'transaction_type',
+    'rpc'
 ]
 
 
