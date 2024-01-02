@@ -88,11 +88,15 @@ class ExportBlocksJob(BaseJob):
 
     def _export_block(self, block, rpc):
         if self.export_blocks:
-            self.item_exporter.export_item(self.block_mapper.block_to_dict(block))
+            block_data = self.block_mapper.block_to_dict(block)
+            block_data['rpc'] = rpc
+            self.item_exporter.export_item(block_data)
         if self.export_transactions:
             self.verify_transactions(block, rpc)
             for tx in block.transactions:
-                self.item_exporter.export_item(self.transaction_mapper.transaction_to_dict(tx))
+                tx_data = self.transaction_mapper.transaction_to_dict(tx)
+                tx_data['rpc'] = rpc
+                self.item_exporter.export_item(tx_data)
 
     def verify_blocks(self, blocks, rpc):
         min_block_number = min([block.number for block in blocks])
