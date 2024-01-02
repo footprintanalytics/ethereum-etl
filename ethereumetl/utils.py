@@ -22,6 +22,7 @@
 
 
 import itertools
+import logging
 import warnings
 
 from ethereumetl.misc.retriable_value_error import RetriableValueError
@@ -49,6 +50,7 @@ def to_int_or_none(val):
     except ValueError:
         return None
 
+
 def to_float_or_none(val):
     if isinstance(val, float):
         return val
@@ -59,6 +61,7 @@ def to_float_or_none(val):
     except ValueError:
         print("can't cast %s to float" % val)
         return val
+
 
 def chunk_string(string, length):
     return (string[0 + i:length + i] for i in range(0, len(string), length))
@@ -147,3 +150,17 @@ def check_classic_provider_uri(chain, provider_uri):
         warnings.warn("ETC Chain not supported on Infura.io. Using https://ethereumclassic.network instead")
         return 'https://ethereumclassic.network'
     return provider_uri
+
+
+def extract_domain(url):
+    from urllib.parse import urlparse
+    try:
+        parsed_url = urlparse(url)
+        domain_parts = parsed_url.netloc.split('.')
+        if len(domain_parts) >= 2:
+            domain = '.'.join(domain_parts[-2:])
+            return domain
+        return parsed_url.netloc
+    except Exception as e:
+        logging.error("Error parsing url %s: %s", url, e)
+        return url
