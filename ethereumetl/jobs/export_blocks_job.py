@@ -30,7 +30,7 @@ from ethereumetl.json_rpc_requests import generate_get_block_by_number_json_rpc
 from ethereumetl.mappers.block_mapper import EthBlockMapper
 from ethereumetl.mappers.transaction_mapper import EthTransactionMapper
 from ethereumetl.misc.retriable_value_error import RetriableValueError
-from ethereumetl.utils import rpc_response_batch_to_results, validate_range, extract_domain
+from ethereumetl.utils import rpc_response_batch_to_results, validate_range, extract_domain, extract_rpc
 
 
 # Exports blocks and transactions
@@ -78,9 +78,7 @@ class ExportBlocksJob(BaseJob):
         blocks_rpc = list(generate_get_block_by_number_json_rpc(block_number_batch, self.export_transactions))
         response = self.batch_web3_provider.make_batch_request(json.dumps(blocks_rpc))
         results = rpc_response_batch_to_results(response)
-        response_rpc = ''
-        if response_rpc is not None and response[0].get('rpc') is not None:
-            response_rpc = response[0].get('rpc')
+        response_rpc = extract_rpc(response)
         blocks = [self.block_mapper.json_dict_to_block(result) for result in results]
         self.verify_blocks(blocks, response_rpc)
         for block in blocks:

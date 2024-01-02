@@ -152,6 +152,13 @@ def check_classic_provider_uri(chain, provider_uri):
     return provider_uri
 
 
+def extract_rpc(data):
+    rpc = ''
+    if data is not None and data[0].get('rpc') is not None:
+        rpc = data[0].get('rpc')
+    return rpc
+
+
 def extract_domain(url):
     from urllib.parse import urlparse
     try:
