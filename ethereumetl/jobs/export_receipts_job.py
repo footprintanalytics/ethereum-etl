@@ -73,6 +73,8 @@ class ExportReceiptsJob(BaseJob):
 
     def _export_receipt(self, receipt):
         if self.export_receipts:
+            if receipt.transaction_hash is None:
+                raise RetriableValueError('Receipt transaction hash is None')
             self.item_exporter.export_item(self.receipt_mapper.receipt_to_dict(receipt))
         if self.export_logs:
             for log in receipt.logs:
