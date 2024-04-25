@@ -22,7 +22,9 @@
 
 
 import itertools
+import json
 from collections import defaultdict
+from ethereumetl.slack import send_to_slack
 
 
 def join(left, right, join_fields, left_fields, right_fields):
@@ -41,10 +43,12 @@ def join(left, right, join_fields, left_fields, right_fields):
     right_fields_as_dict = field_list_to_dict(right_fields)
 
     left_map = defaultdict(list)
-    for item in left: left_map[item[left_join_field]].append(item)
+    for item in left:
+        left_map[item[left_join_field]].append(item)
 
     right_map = defaultdict(list)
-    for item in right: right_map[item[right_join_field]].append(item)
+    for item in right:
+        right_map[item[right_join_field]].append(item)
 
     for key in left_map.keys():
         for left_item, right_item in itertools.product(left_map[key], right_map[key]):
@@ -55,6 +59,7 @@ def join(left, right, join_fields, left_fields, right_fields):
                 result_item[dst_field] = right_item.get(src_field)
 
             yield result_item
+
 
 def multi_join(left, right, join_fields, left_fields, right_fields):
     def field_list_to_dict(field_list):
@@ -130,7 +135,9 @@ def enrich_transactions(transactions, receipts):
 
     if len(result) != len(transactions):
         block_numbers = set([tx['block_number'] for tx in transactions])
-        raise ValueError(f'The number of transactions is wrong blocks:{block_numbers} result:{len(result)} transactions:{len(transactions)}')
+        message = format_message('transactions', transactions, result, block_numbers)
+        send_to_slack(message)
+        raise ValueError(message)
 
     return result
 
@@ -155,7 +162,9 @@ def enrich_logs(blocks, logs):
 
     if len(result) != len(logs):
         block_numbers = set([log['block_number'] for log in logs])
-        raise ValueError(f'The number of logs is wrong blocks:{block_numbers} logs:{len(logs)} result:{len(result)}')
+        message = format_message('logs', logs, result, block_numbers)
+        send_to_slack(message)
+        raise ValueError(message)
 
     return result
 
@@ -179,7 +188,10 @@ def enrich_token_transfers(blocks, token_transfers):
         ]))
 
     if len(result) != len(token_transfers):
-        raise ValueError('The number of token transfers is wrong ' + str(result))
+        block_numbers = set([token_transfer['block_number'] for token_transfer in token_transfers])
+        message = format_message('token_transfers', token_transfers, result, block_numbers)
+        send_to_slack(message)
+        raise ValueError(message)
 
     return result
 
@@ -215,34 +227,37 @@ def enrich_traces(blocks, traces):
         ]))
 
     if len(result) != len(traces):
-        raise ValueError('The number of traces is wrong ' + str(result))
+        block_numbers = set([trace['block_number'] for trace in traces])
+        message = format_message('traces', traces, result, block_numbers)
+        send_to_slack(message)
+        raise ValueError(message)
 
     return result
 
 
 def enrich_geth_traces(blocks, transactions, traces):
     traces_fields = [
-            'type',
-            'transaction_index',
-            'from_address',
-            'to_address',
-            'value',
-            'input',
-            'output',
-            'trace_type',
-            'call_type',
-            'reward_type',
-            'gas',
-            'gas_used',
-            'subtraces',
-            'trace_address',
-            'error',
-            'status',
-            'transaction_hash',
-            'block_number',
-            'trace_id',
-            'trace_index'
-        ]
+        'type',
+        'transaction_index',
+        'from_address',
+        'to_address',
+        'value',
+        'input',
+        'output',
+        'trace_type',
+        'call_type',
+        'reward_type',
+        'gas',
+        'gas_used',
+        'subtraces',
+        'trace_address',
+        'error',
+        'status',
+        'transaction_hash',
+        'block_number',
+        'trace_id',
+        'trace_index'
+    ]
     traces_blocks = list(join(
         traces, blocks, ('block_number', 'number'),
         traces_fields,
@@ -259,8 +274,10 @@ def enrich_geth_traces(blocks, transactions, traces):
         ]))
 
     if len(result) != len(traces):
-        raise ValueError(
-            f'The number of traces is wrong blocks:{len(blocks)} transactions:{len(traces)} traces:{len(traces)} result:{len(result)}')
+        block_numbers = set([trace['block_number'] for trace in traces])
+        message = format_message('geth_traces', traces, result, block_numbers)
+        send_to_slack(message)
+        raise ValueError(message)
 
     return result
 
@@ -283,7 +300,10 @@ def enrich_contracts(blocks, contracts):
         ]))
 
     if len(result) != len(contracts):
-        raise ValueError('The number of contracts is wrong ' + str(result))
+        block_numbers = set([contract['block_number'] for contract in contracts])
+        message = format_message('contracts', contracts, result, block_numbers)
+        send_to_slack(message)
+        raise ValueError(message)
 
     return result
 
@@ -306,6 +326,13 @@ def enrich_tokens(blocks, tokens):
         ]))
 
     if len(result) != len(tokens):
-        raise ValueError('The number of tokens is wrong ' + str(result))
+        block_numbers = set([token['block_number'] for token in tokens])
+        message = format_message('tokens', tokens, result, block_numbers)
+        send_to_slack(message)
+        raise ValueError(message)
 
     return result
+
+
+def format_message(type, tokens, result, block_numbers):
+    return f'The number of {type} is wrong: should be {len(tokens)}, but got {len(result)}, retrying for blocks:{block_numbers}...'
