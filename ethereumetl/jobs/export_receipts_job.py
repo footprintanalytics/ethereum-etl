@@ -28,7 +28,8 @@ from ethereumetl.executors.batch_work_executor import BatchWorkExecutor
 from ethereumetl.json_rpc_requests import generate_get_receipt_json_rpc
 from ethereumetl.mappers.receipt_log_mapper import EthReceiptLogMapper
 from ethereumetl.mappers.receipt_mapper import EthReceiptMapper
-from ethereumetl.utils import rpc_response_batch_to_results
+from ethereumetl.misc.retriable_value_error import RetriableValueError
+from ethereumetl.utils import rpc_response_batch_to_results, extract_rpc, extract_domain
 
 
 # Exports receipts and logs
@@ -64,18 +65,28 @@ class ExportReceiptsJob(BaseJob):
 
     def _export_receipts(self, transaction_hashes):
         receipts_rpc = list(generate_get_receipt_json_rpc(transaction_hashes))
-        response, endpoint_url = self.batch_web3_provider.make_batch_request(json.dumps(receipts_rpc))
+        response = self.batch_web3_provider.make_batch_request(json.dumps(receipts_rpc))
         results = rpc_response_batch_to_results(response)
+        response_rpc = extract_rpc(response)
         receipts = [self.receipt_mapper.json_dict_to_receipt(result) for result in results]
         for receipt in receipts:
-            self._export_receipt(receipt)
+            self._export_receipt(receipt, response_rpc)
 
-    def _export_receipt(self, receipt):
+    def _export_receipt(self, receipt, rpc):
+        rpc_domain = extract_domain(rpc)
         if self.export_receipts:
-            self.item_exporter.export_item(self.receipt_mapper.receipt_to_dict(receipt))
+            if receipt.transaction_hash is None:
+                raise RetriableValueError(f'RPC: {rpc}, Receipt transaction hash is None')
+            receipt_data = self.receipt_mapper.receipt_to_dict(receipt)
+            receipt_data['rpc'] = rpc_domain
+            self.item_exporter.export_item(receipt_data)
         if self.export_logs:
             for log in receipt.logs:
-                self.item_exporter.export_item(self.receipt_log_mapper.receipt_log_to_dict(log))
+                if log.data is None:
+                    raise RetriableValueError(f'RPC: {rpc}, Receipt log data is None')
+                log_data = self.receipt_log_mapper.receipt_log_to_dict(log)
+                log_data['rpc'] = rpc_domain
+                self.item_exporter.export_item(log_data)
 
     def _end(self):
         self.batch_work_executor.shutdown()

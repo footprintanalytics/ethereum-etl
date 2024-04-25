@@ -26,6 +26,9 @@ import json
 from collections import defaultdict
 from ethereumetl.slack import send_to_slack
 
+from ethereumetl.enumeration.chain_type import ChainType
+from ethereumetl.misc.retriable_value_error import RetriableValueError
+
 
 def join(left, right, join_fields, left_fields, right_fields):
     left_join_field, right_join_field = join_fields
@@ -196,7 +199,7 @@ def enrich_token_transfers(blocks, token_transfers):
     return result
 
 
-def enrich_traces(blocks, traces):
+def enrich_traces(blocks, traces, chain=None):
     result = list(join(
         traces, blocks, ('block_number', 'number'),
         [
@@ -231,6 +234,22 @@ def enrich_traces(blocks, traces):
         message = format_message('traces', traces, result, block_numbers)
         send_to_slack(message)
         raise ValueError(message)
+
+    # polygon 不做这个检查
+    if chain == ChainType.POLYGON:
+        return result
+
+    traces_transaction_count = 0
+    for trace in traces:
+        if trace['trace_address'] == [] and trace['transaction_hash'] is not None:
+            traces_transaction_count += 1
+
+    blocks_transaction_count = sum(block['transaction_count'] for block in blocks)
+    if traces_transaction_count != blocks_transaction_count:
+        print(f'traces transactions count is wrong, block_number: {blocks[0]["number"]}, '
+              f'blocks_transaction_count: {blocks_transaction_count}, '
+              f'traces_transaction_count: {traces_transaction_count}')
+        # raise RetriableValueError('traces transactions count is wrong')
 
     return result
 
@@ -270,7 +289,8 @@ def enrich_geth_traces(blocks, transactions, traces):
         traces_blocks, transactions, (['block_number', 'transaction_index'], ['block_number', 'transaction_index']),
         traces_fields + ['block_timestamp', 'block_hash'],
         [
-            'transaction_hash'
+            ('hash', 'transaction_hash'),
+            'transaction_index',
         ]))
 
     if len(result) != len(traces):

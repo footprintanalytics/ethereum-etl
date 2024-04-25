@@ -2,6 +2,7 @@ import logging
 
 from blockchainetl.jobs.exporters.console_item_exporter import ConsoleItemExporter
 from blockchainetl.jobs.exporters.in_memory_item_exporter import InMemoryItemExporter
+from ethereumetl.enumeration.chain_type import ChainType
 from ethereumetl.enumeration.entity_type import EntityType
 from ethereumetl.jobs.export_blocks_job import ExportBlocksJob
 from ethereumetl.jobs.export_geth_traces_job import ExportGethTracesJob
@@ -11,6 +12,10 @@ from ethereumetl.jobs.extract_contracts_job import ExtractContractsJob
 from ethereumetl.jobs.extract_geth_traces_job import ExtractGethTracesJob
 from ethereumetl.jobs.extract_token_transfers_job import ExtractTokenTransfersJob
 from ethereumetl.jobs.extract_tokens_job import ExtractTokensJob
+from ethereumetl.mappers.receipt_log_mapper import EthReceiptLogMapper
+from ethereumetl.misc.retriable_value_error import RetriableValueError
+from ethereumetl.providers.multi_batch_rpc import BatchMultiHTTPProvider
+from ethereumetl.service.token_transfer_extractor import TRANSFER_EVENT_TOPIC
 from ethereumetl.streaming.enrich import enrich_transactions, enrich_logs, enrich_token_transfers, enrich_traces, \
     enrich_contracts, enrich_tokens, enrich_geth_traces
 from ethereumetl.streaming.eth_item_id_calculator import EthItemIdCalculator
@@ -22,12 +27,14 @@ from ethereumetl.web3_utils import build_web3
 class EthStreamerAdapter:
     def __init__(
             self,
+            chain,
             batch_web3_provider,
             item_exporter=ConsoleItemExporter(),
             batch_size=100,
             max_workers=5,
             entity_types=tuple(EntityType.ALL_FOR_STREAMING),
             geth_traces_provider=None):
+        self.chain = chain
         self.batch_web3_provider = batch_web3_provider
         self.item_exporter = item_exporter
         self.batch_size = batch_size
@@ -41,6 +48,10 @@ class EthStreamerAdapter:
         self.item_exporter.open()
 
     def get_current_block_number(self):
+        if isinstance(self.batch_web3_provider, ThreadLocalProxy):
+            http_provider = self.batch_web3_provider._get_thread_local_delegate()
+            if isinstance(http_provider, BatchMultiHTTPProvider):
+                http_provider.endpoint_uri = http_provider.endpoint_manager.get_next_active_endpoint().endpoint_url
         w3 = build_web3(self.batch_web3_provider)
         return int(w3.eth.getBlock("latest").number)
 
@@ -87,7 +98,7 @@ class EthStreamerAdapter:
             if EntityType.LOG in self.entity_types else []
         enriched_token_transfers = enrich_token_transfers(blocks, token_transfers) \
             if EntityType.TOKEN_TRANSFER in self.entity_types else []
-        enriched_traces = enrich_traces(blocks, traces) \
+        enriched_traces = enrich_traces(blocks, traces, self.chain) \
             if EntityType.TRACE in self.entity_types else []
         enriched_geth_traces = enrich_geth_traces(blocks, transactions, geth_traces) \
             if EntityType.GETH_TRACES in self.entity_types else []
@@ -123,12 +134,58 @@ class EthStreamerAdapter:
             max_workers=self.max_workers,
             item_exporter=blocks_and_transactions_item_exporter,
             export_blocks=self._should_export(EntityType.BLOCK),
-            export_transactions=self._should_export(EntityType.TRANSACTION)
+            export_transactions=self._should_export(EntityType.TRANSACTION),
+            chain=self.chain
         )
         blocks_and_transactions_job.run()
         blocks = blocks_and_transactions_item_exporter.get_items('block')
         transactions = blocks_and_transactions_item_exporter.get_items('transaction')
+
+
         return blocks, transactions
+
+    def verify_transaction_from_address_nonce(self, blocks, transactions):
+        # 将 transactions 按 block_number 分组
+        transaction_group = {}
+        for transaction in transactions:
+            block_number = transaction['block_number']
+            if transaction_group.get(block_number) is None:
+                transaction_group[block_number] = []
+            if self.chain == ChainType.POLYGON \
+                    and transaction['to_address'] == '0x0000000000000000000000000000000000000000':
+                continue
+            if self.chain == ChainType.FANTOM \
+                    and transaction['to_address'] == '0xd100a01e00000000000000000000000000000000':
+                continue
+            transaction_group[block_number].append(transaction['from_address'])
+
+        for block in blocks:
+            block_number = block['number']
+            from_address_list = transaction_group.get(block_number, [])
+            from_address_set = list(set(from_address_list))
+            if len(from_address_set) == 1 and from_address_set[0] == '0x0000000000000000000000000000000000000000' \
+                    and block['transaction_count'] > 1:
+                raise RetriableValueError(f'Transactions within a block should not all be 0x0000000, '
+                                          f'block_number: {block_number}')
+            # 判断 from_address_list 里 0x0000000000000000000000000000000000000000 的占比
+            nonce_address_count = 0
+            for from_address in from_address_list:
+                if from_address == '0x0000000000000000000000000000000000000000':
+                    nonce_address_count += 1
+            # 如果 0x000 个数占比超过 50%，则报错重试
+            if len(from_address_list) > 0 and nonce_address_count / len(from_address_list) > 0.5 and block['transaction_count'] > 1:
+                raise RetriableValueError(f'Transactions within a block should not have more than 50% 0x0000000, '
+                                          f'block_number: {block_number}')
+
+    def verify_transaction_count(self, blocks, transactions):
+        blocks_transaction_count = 0
+        for block in blocks:
+            blocks_transaction_count += block['transaction_count']
+        if blocks_transaction_count != len(transactions):
+            raise RetriableValueError(f'Transaction count mismatch, '
+                                      f'blocks_transaction_count: {blocks_transaction_count}, '
+                                      f'transactions_count: {len(transactions)}')
+
 
     def _export_receipts_and_logs(self, transactions):
         exporter = InMemoryItemExporter(item_types=['receipt', 'log'])
@@ -147,6 +204,21 @@ class EthStreamerAdapter:
         return receipts, logs
 
     def _extract_token_transfers(self, logs):
+        def verify_token_transfers(logs, token_transfers):
+            token_transfers_in_logs_count = 0
+            receipt_log_mapper = EthReceiptLogMapper()
+            for log_dict in logs:
+                log = receipt_log_mapper.dict_to_receipt_log(log_dict)
+                topics = log.topics
+                if topics is None or len(topics) < 1:
+                    continue
+                if (topics[0]).casefold() == TRANSFER_EVENT_TOPIC:
+                    token_transfers_in_logs_count += 1
+            if len(token_transfers) != token_transfers_in_logs_count:
+                raise RetriableValueError('Token transfers count mismatch: '
+                                   'token_transfers={}, token_transfers_in_logs={}'.format(
+                    len(token_transfers), token_transfers_in_logs_count))
+
         exporter = InMemoryItemExporter(item_types=['token_transfer'])
         job = ExtractTokenTransfersJob(
             logs_iterable=logs,
@@ -155,6 +227,7 @@ class EthStreamerAdapter:
             item_exporter=exporter)
         job.run()
         token_transfers = exporter.get_items('token_transfer')
+        verify_token_transfers(logs, token_transfers)
         return token_transfers
 
     def _export_traces(self, start_block, end_block):

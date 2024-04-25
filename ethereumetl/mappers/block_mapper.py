@@ -23,6 +23,7 @@
 
 from ethereumetl.domain.block import EthBlock
 from ethereumetl.mappers.transaction_mapper import EthTransactionMapper
+from ethereumetl.misc.retriable_value_error import RetriableValueError
 from ethereumetl.utils import hex_to_dec, to_normalized_address
 
 
@@ -54,6 +55,7 @@ class EthBlockMapper(object):
         block.timestamp = hex_to_dec(json_dict.get('timestamp'))
         block.base_fee_per_gas = hex_to_dec(json_dict.get('baseFeePerGas'))
         block.withdrawals_root = json_dict.get('withdrawalsRoot')
+        block.transaction_count = len(json_dict['transactions'])
 
         if 'transactions' in json_dict:
             block.transactions = [
@@ -61,9 +63,6 @@ class EthBlockMapper(object):
                 for tx in json_dict['transactions']
                 if isinstance(tx, dict)
             ]
-
-            block.transaction_count = len(json_dict['transactions'])
-
         if 'withdrawals' in json_dict:
             block.withdrawals = self.parse_withdrawals(json_dict['withdrawals'])
 
