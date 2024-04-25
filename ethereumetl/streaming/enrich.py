@@ -355,4 +355,4 @@ def enrich_tokens(blocks, tokens):
 
 
 def format_message(type, should_result, got_result, block_numbers):
-    return f'The number of {type} is wrong: should be {len(should_result)}, but got {len(got_result)}, retrying for blocks:{block_numbers}...'
+    return f'The number of {type} is wrong: should be {len(should_result)}, but got {len(got_result)}, retrying...'
