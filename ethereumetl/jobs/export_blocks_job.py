@@ -50,8 +50,9 @@ class ExportBlocksJob(BaseJob):
         self.start_block = start_block
         self.end_block = end_block
 
+        # 节点池
         self.batch_web3_provider = batch_web3_provider
-
+        # 批量工作执行器
         self.batch_work_executor = BatchWorkExecutor(batch_size, max_workers)
         self.item_exporter = item_exporter
 

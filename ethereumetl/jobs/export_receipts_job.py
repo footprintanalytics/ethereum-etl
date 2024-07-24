@@ -43,9 +43,10 @@ class ExportReceiptsJob(BaseJob):
             item_exporter,
             export_receipts=True,
             export_logs=True):
+        # 节点池
         self.batch_web3_provider = batch_web3_provider
         self.transaction_hashes_iterable = transaction_hashes_iterable
-
+        # 批量工作执行器
         self.batch_work_executor = BatchWorkExecutor(batch_size, max_workers)
         self.item_exporter = item_exporter
 

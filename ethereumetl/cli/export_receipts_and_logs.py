@@ -54,6 +54,7 @@ def export_receipts_and_logs(batch_size, transaction_hashes, provider_uri, max_w
     provider_uri = check_classic_provider_uri(chain, provider_uri)
     with smart_open(transaction_hashes, 'r') as transaction_hashes_file:
         job = ExportReceiptsJob(
+            # 生成器表达式拿到 transaction_hash 迭代器
             transaction_hashes_iterable=(transaction_hash.strip() for transaction_hash in transaction_hashes_file),
             batch_size=batch_size,
             batch_web3_provider=ThreadLocalProxy(lambda: get_provider_from_uri(provider_uri, batch=True)),
