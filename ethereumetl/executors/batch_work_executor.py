@@ -56,6 +56,7 @@ class BatchWorkExecutor:
     def execute(self, work_iterable, work_handler, total_items=None):
         self.progress_logger.start(total_items=total_items)
         for batch in dynamic_batch_iterator(work_iterable, lambda: self.batch_size):
+            # 将批次提交给执行器，使用 _fail_safe_execute 方法安全地执行 work_handler。
             self.executor.submit(self._fail_safe_execute, work_handler, batch)
 
     def _fail_safe_execute(self, work_handler, batch):

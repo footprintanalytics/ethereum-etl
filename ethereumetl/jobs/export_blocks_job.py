@@ -65,10 +65,12 @@ class ExportBlocksJob(BaseJob):
         self.chain = chain
 
     def _start(self):
+        # 先把文件创建好
         self.item_exporter.open()
 
     def _export(self):
         self.batch_work_executor.execute(
+            # 生成从 start_block 到 end_block + 1 的列表
             range(self.start_block, self.end_block + 1),
             self._export_batch,
             total_items=self.end_block - self.start_block + 1
@@ -76,14 +78,18 @@ class ExportBlocksJob(BaseJob):
 
     def _export_batch(self, block_number_batch):
         blocks_rpc = list(generate_get_block_by_number_json_rpc(block_number_batch, self.export_transactions))
+        # 发起请求得到响应
         response = self.batch_web3_provider.make_batch_request(json.dumps(blocks_rpc))
         results = rpc_response_batch_to_results(response)
+        # 从响应中提取 rpc
         response_rpc = extract_rpc(response)
+        # 从响应中提取 block 对象
         blocks = [self.block_mapper.json_dict_to_block(result) for result in results]
         self.verify_blocks(blocks, response_rpc)
         for block in blocks:
             self._export_block(block, response_rpc)
 
+    # 导出 block 和 transaction 到指定的文件（通过 item_exporter）
     def _export_block(self, block, rpc):
         rpc_domain = extract_domain(rpc)
         if self.export_blocks:

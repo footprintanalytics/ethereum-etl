@@ -58,6 +58,7 @@ def export_blocks_and_transactions(start_block, end_block, batch_size, provider_
         start_block=start_block,
         end_block=end_block,
         batch_size=batch_size,
+        # 节点池
         batch_web3_provider=ThreadLocalProxy(lambda: get_provider_from_uri(provider_uri, batch=True)),
         max_workers=max_workers,
         item_exporter=blocks_and_transactions_item_exporter(blocks_output, transactions_output),

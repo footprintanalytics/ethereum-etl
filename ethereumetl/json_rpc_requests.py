@@ -21,6 +21,7 @@
 # SOFTWARE.
 
 
+# 生成器函数，使用 yield 关键字，生成 JSON-RPC 请求并逐一返回
 def generate_get_block_by_number_json_rpc(block_numbers, include_transactions):
     for idx, block_number in enumerate(block_numbers):
         yield generate_json_rpc(
