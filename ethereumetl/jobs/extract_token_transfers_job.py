@@ -36,6 +36,7 @@ class ExtractTokenTransfersJob(BaseJob):
             item_exporter):
         self.logs_iterable = logs_iterable
 
+        # 批量工作执行器
         self.batch_work_executor = BatchWorkExecutor(batch_size, max_workers)
         self.item_exporter = item_exporter
 
