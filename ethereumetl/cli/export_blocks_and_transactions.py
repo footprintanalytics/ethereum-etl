@@ -67,3 +67,8 @@ def export_blocks_and_transactions(start_block, end_block, batch_size, provider_
         chain=chain
     )
     job.run()
+
+if __name__ == '__main__':
+    export_blocks_and_transactions.callback(13146886, 13148535, 15, 'https://merlin.blockpi.network/v1/rpc/b312ca40bd2c7c8aef67c75628df2add108edaf7', 15,
+                                            '/Users/trail/PycharmProjects/ethereum-etl/blocks.json',
+                                            '/Users/trail/PycharmProjects/ethereum-etl/transactions.json', 'merlin')

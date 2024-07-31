@@ -33,3 +33,9 @@ from ethereumetl import misc_utils
 def extract_field(input, output, field):
     """Extracts field from given CSV or JSON newline-delimited file."""
     misc_utils.extract_field(input, output, field)
+
+
+if __name__ == '__main__':
+    extract_field.callback('/Users/trail/PycharmProjects/ethereum-etl/transactions.json',
+                           '/Users/trail/PycharmProjects/ethereum-etl/transactions_hash.csv',
+                           'hash')

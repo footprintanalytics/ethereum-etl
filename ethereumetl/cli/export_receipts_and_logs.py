@@ -64,3 +64,10 @@ def export_receipts_and_logs(batch_size, transaction_hashes, provider_uri, max_w
             export_logs=logs_output is not None)
 
         job.run()
+
+
+if __name__ == '__main__':
+    export_receipts_and_logs.callback(15, '/Users/trail/PycharmProjects/ethereum-etl/transactions_hash.csv',
+                                      'https://rpc.merlinchain.io/',
+                                      10, '/Users/trail/PycharmProjects/ethereum-etl/receipts.csv',
+                                      '/Users/trail/PycharmProjects/ethereum-etl/logs.csv',)
