@@ -15,7 +15,7 @@ from ethereumetl.jobs.extract_tokens_job import ExtractTokensJob
 from ethereumetl.mappers.receipt_log_mapper import EthReceiptLogMapper
 from ethereumetl.misc.retriable_value_error import RetriableValueError
 from ethereumetl.providers.multi_batch_rpc import BatchMultiHTTPProvider
-from ethereumetl.service.token_transfer_extractor import TRANSFER_EVENT_TOPIC
+from ethereumetl.service.token_transfer_extractor import TRANSFER_EVENT_TOPIC, split_to_words
 from ethereumetl.streaming.enrich import enrich_transactions, enrich_logs, enrich_token_transfers, enrich_traces, \
     enrich_contracts, enrich_tokens, enrich_geth_traces
 from ethereumetl.streaming.eth_item_id_calculator import EthItemIdCalculator
@@ -212,7 +212,14 @@ class EthStreamerAdapter:
                 topics = log.topics
                 if topics is None or len(topics) < 1:
                     continue
-                if (topics[0]).casefold() == TRANSFER_EVENT_TOPIC:
+                """
+                    etl 收录 token transfer 的判断逻辑： 
+                    topics_with_data = topics + split_to_words(receipt_log.data)
+                    当 topics[0] == TRANSFER_EVENT_TOPIC && topics_with_data.len == 4 时收录至 token transfer
+                    做校验时保持一致
+                """
+                topics_with_data = topics + split_to_words(log.data)
+                if (topics[0]).casefold() == TRANSFER_EVENT_TOPIC and len(topics_with_data) == 4:
                     token_transfers_in_logs_count += 1
             if len(token_transfers) != token_transfers_in_logs_count:
                 raise RetriableValueError('Token transfers count mismatch: '
