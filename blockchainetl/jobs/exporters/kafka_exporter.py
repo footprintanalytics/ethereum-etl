@@ -132,7 +132,7 @@ class KafkaItemExporter:
         logging.info(f"Exporting {total_items} items, {datetime.now()}")
         
         # 使用更保守的线程数，而不是进程
-        thread_count = 16
+        thread_count = 8
         
         if total_items == 0:
             logging.warning("No items to export")
