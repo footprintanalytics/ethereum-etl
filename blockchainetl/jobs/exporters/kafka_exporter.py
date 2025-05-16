@@ -72,15 +72,14 @@ class KafkaItemExporter:
         total_items = len(items)
         logging.info(f"Exporting {total_items} items using multiprocessing, {datetime.now()}")
         
-        # 准备多进程参数
-        cpu_count = multiprocessing.cpu_count()
-        process_count = cpu_count
+        # 使用固定的4个进程，避免创建过多Kafka实例
+        process_count = 4
         
         if total_items == 0:
             logging.warning("No items to export")
             return
             
-        # 根据CPU核心数平均分配消息
+        # 根据固定进程数平均分配消息
         chunk_size = max(1, total_items // process_count)  # 确保至少为1
         logging.info(f"Using {process_count} processes with ~{chunk_size} items per process")
         
@@ -101,7 +100,7 @@ class KafkaItemExporter:
         start_time = datetime.now()
         total_processed = 0
         
-        with Pool(processes=len(batches)) as pool:
+        with Pool(processes=min(process_count, len(batches))) as pool:
             results = pool.map(process_items_batch, batches)
             total_processed = sum(results)
         
