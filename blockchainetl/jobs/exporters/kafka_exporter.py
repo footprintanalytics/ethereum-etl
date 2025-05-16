@@ -4,7 +4,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import multiprocessing
-from multiprocessing import Pool
+from multiprocessing import Pool, Manager
 import time
 import signal
 import traceback
@@ -19,40 +19,100 @@ from blockchainetl.jobs.exporters.converters.composite_item_converter import Com
 def timeout_handler(signum, frame):
     raise TimeoutError("Processing timed out")
 
-# 全局函数，用于多线程调用而不是多进程
-def process_items_batch(batch_data):
-    connection_url, topic_prefix, topic_mapping, items, batch_id = batch_data
+# 混合方案：每个进程内使用线程池处理批次
+def process_worker(worker_data):
+    connection_url, topic_prefix, topic_mapping, all_items, worker_id, num_threads = worker_data
     
-    # 设置线程级别超时保护 - 实际上在线程中SIGALRM不起作用，但保留代码结构
+    try:
+        start_time = datetime.now()
+        pid = multiprocessing.current_process().pid
+        logging.info(f"Process {pid} (worker {worker_id}) started at {start_time} with {len(all_items)} items")
+        
+        # 在进程内创建一个共享的Kafka生产者
+        producer = KafkaProducer(
+            bootstrap_servers=connection_url,
+            max_block_ms=30000,      
+            request_timeout_ms=20000,
+            max_in_flight_requests_per_connection=5,
+            connections_max_idle_ms=60000,
+            reconnect_backoff_ms=1000,
+            batch_size=16384,         # 增加批处理大小
+            linger_ms=10,             # 短暂等待以收集更多消息
+            buffer_memory=33554432    # 32MB缓冲区
+        )
+        
+        # 准备本进程内的线程数据
+        batch_size = max(1, len(all_items) // num_threads)
+        thread_batches = []
+        
+        for i in range(0, len(all_items), batch_size):
+            thread_id = len(thread_batches) + 1
+            end_idx = min(i + batch_size, len(all_items))
+            thread_batches.append((
+                all_items[i:end_idx],
+                thread_id,
+                worker_id,
+                pid,
+                producer,  # 共享同一个producer
+                topic_prefix,
+                topic_mapping
+            ))
+        
+        # 在进程内使用线程池处理
+        total_processed = 0
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            future_to_batch = {executor.submit(process_thread_batch, batch): i 
+                              for i, batch in enumerate(thread_batches)}
+            
+            for future in future_to_batch:
+                try:
+                    result = future.result(timeout=300)  # 5分钟超时
+                    total_processed += result
+                except Exception as e:
+                    logging.error(f"Error in thread processing: {str(e)}")
+        
+        # 确保所有消息发送
+        try:
+            producer.flush(timeout=60)
+        except Exception as e:
+            logging.error(f"Process {pid} (worker {worker_id}) error during final flush: {str(e)}")
+        
+        # 关闭producer
+        producer.close(timeout=10)
+        
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        logging.info(f"Process {pid} (worker {worker_id}) completed {total_processed} items in {duration:.1f} seconds ({total_processed/duration if duration > 0 else 0:.1f} items/sec)")
+        
+        return total_processed
+    except Exception as e:
+        logging.error(f"Worker {worker_id} unexpected error: {str(e)}")
+        logging.error(traceback.format_exc())
+        return 0
+
+# 线程处理函数，使用共享的Kafka生产者
+def process_thread_batch(batch_data):
+    items, thread_id, worker_id, pid, producer, topic_prefix, topic_mapping = batch_data
+    
     try:
         processed_count = 0
         error_count = 0
         start_time = datetime.now()
-        tid = batch_id  # 在线程模式下使用batch_id作为标识
-        logging.info(f"Worker {tid} started at {start_time} with {len(items)} items")
-        
-        # 创建独立的producer - 但使用更保守的配置
-        producer = KafkaProducer(
-            bootstrap_servers=connection_url,
-            max_block_ms=30000,       # 最大阻塞30秒
-            request_timeout_ms=20000,  # 请求超时20秒
-            max_in_flight_requests_per_connection=5,
-            connections_max_idle_ms=60000,  # 空闲连接在60秒后关闭
-            reconnect_backoff_ms=1000,
-            reconnect_backoff_max_ms=10000
-        )
+        logging.info(f"Thread {thread_id} in process {pid} (worker {worker_id}) started with {len(items)} items")
         
         # 进度报告频率
-        report_interval = max(1, len(items) // 10)  # 10%的项目报告一次进度
+        report_interval = max(1, len(items) // 5)  # 20%的项目报告一次进度
         last_report_time = start_time
+        batch_data = []  # 用于批量处理
         
         for i, item in enumerate(items):
+            # 进度报告
             if i > 0 and i % report_interval == 0:
                 now = datetime.now()
                 elapsed = (now - last_report_time).total_seconds()
                 progress_pct = (i / len(items)) * 100
                 items_per_second = report_interval / elapsed if elapsed > 0 else 0
-                logging.info(f"Worker {tid} progress: {progress_pct:.1f}% ({i}/{len(items)}) - {items_per_second:.1f} items/sec")
+                logging.info(f"Thread {thread_id} in process {pid} progress: {progress_pct:.1f}% - {items_per_second:.1f} items/sec")
                 last_report_time = now
             
             try:
@@ -61,35 +121,27 @@ def process_items_batch(batch_data):
                     data = json.dumps(item).encode('utf-8')
                     producer.send(topic_prefix + topic_mapping[item_type], value=data)
                     processed_count += 1
-                    # 定期刷新避免积压太多消息
+                    
+                    # 批量处理: 每100条消息刷新一次
                     if processed_count % 100 == 0:
                         producer.flush(timeout=5)
                 else:
                     logging.warning(f'Topic for item type "{item_type}" is not configured.')
             except Exception as e:
                 error_count += 1
-                logging.error(f"Worker {tid} error processing item {i}: {str(e)}")
-                if error_count >= 100:  # 如果错误太多，提前退出
-                    logging.error(f"Worker {tid} too many errors, aborting batch")
+                if error_count <= 5:  # 只记录前几个错误，避免日志爆炸
+                    logging.error(f"Error processing item {i}: {str(e)}")
+                if error_count >= 100:
+                    logging.error(f"Too many errors, aborting batch")
                     break
-        
-        # 确保所有消息发送，但添加超时
-        try:
-            producer.flush(timeout=30)  # 30秒超时
-        except Exception as e:
-            logging.error(f"Worker {tid} error during flush: {str(e)}")
-        
-        # 关闭producer
-        producer.close(timeout=10)
         
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
-        logging.info(f"Worker {tid} completed {processed_count} items with {error_count} errors in {duration:.1f} seconds ({processed_count/duration if duration > 0 else 0:.1f} items/sec)")
+        logging.info(f"Thread {thread_id} in process {pid} completed {processed_count} items with {error_count} errors in {duration:.1f} seconds")
         
         return processed_count
     except Exception as e:
-        logging.error(f"Worker {batch_id} unexpected error: {str(e)}")
-        logging.error(traceback.format_exc())
+        logging.error(f"Thread {thread_id} in process {pid} unexpected error: {str(e)}")
         return 0
 
 
@@ -102,7 +154,6 @@ class KafkaItemExporter:
         self.topic_prefix = self.get_topic_prefix(output)
         print(self.connection_url, self.topic_prefix)
         print(self.connection_url)
-        # 使用更保守的Kafka配置
         self.producer = KafkaProducer(
             bootstrap_servers=self.connection_url,
             max_block_ms=30000,
@@ -129,55 +180,64 @@ class KafkaItemExporter:
 
     def export_items(self, items):
         total_items = len(items)
-        logging.info(f"Exporting {total_items} items, {datetime.now()}")
-        
-        # 使用更保守的线程数，而不是进程
-        thread_count = 8
+        logging.info(f"Exporting {total_items} items with hybrid multiprocessing+multithreading approach, {datetime.now()}")
         
         if total_items == 0:
             logging.warning("No items to export")
             return
-            
-        # 根据线程数平均分配消息
-        chunk_size = max(1, total_items // thread_count)
-        logging.info(f"Using {thread_count} workers with ~{chunk_size} items per worker")
         
-        # 准备批次数据
-        batches = []
+        # 配置混合并行策略
+        cpu_count = multiprocessing.cpu_count()
+        process_count = min(4, cpu_count)  # 最多4个进程，避免过多Kafka连接
+        threads_per_process = 4  # 每个进程4个线程
+        
+        logging.info(f"Using {process_count} processes with {threads_per_process} threads each (total {process_count*threads_per_process} workers)")
+        
+        # 按进程数分割项目
+        chunk_size = max(1, total_items // process_count)
+        process_batches = []
+        
         for i in range(0, total_items, chunk_size):
-            batch_id = len(batches) + 1
+            worker_id = len(process_batches) + 1
             end_idx = min(i + chunk_size, total_items)
-            batch_items = items[i:end_idx]
-            batches.append((
+            process_batches.append((
                 self.connection_url,
                 self.topic_prefix,
                 self.item_type_to_topic_mapping,
-                batch_items,
-                batch_id
+                items[i:end_idx],
+                worker_id,
+                threads_per_process
             ))
         
-        # 使用线程池而不是进程池
+        # 使用进程池
         start_time = datetime.now()
         total_processed = 0
         
-        with ThreadPoolExecutor(max_workers=thread_count) as executor:
-            # 提交所有批次任务
-            future_to_batch = {executor.submit(process_items_batch, batch): i for i, batch in enumerate(batches)}
-            
-            # 收集结果
-            for future in future_to_batch:
-                try:
-                    result = future.result(timeout=600)  # 10分钟超时
-                    total_processed += result
-                except Exception as e:
-                    logging.error(f"Error in thread processing: {str(e)}")
+        # 使用进程上下文管理器确保安全
+        try:
+            ctx = multiprocessing.get_context('spawn')  # 使用spawn而不是fork，更安全
+            with ctx.Pool(processes=len(process_batches)) as pool:
+                results = pool.map_async(process_worker, process_batches)
+                
+                # 等待结果，避免永久阻塞
+                while not results.ready():
+                    logging.info(f"Waiting for {len(process_batches)} processes to complete...")
+                    if results.wait(timeout=30):  # 每30秒检查一次
+                        break
+                
+                # 获取结果
+                processed_results = results.get(timeout=10)
+                total_processed = sum(processed_results)
+        except Exception as e:
+            logging.error(f"Error in parallel processing: {str(e)}")
+            logging.error(traceback.format_exc())
         
         end_time = datetime.now()
         duration = end_time - start_time
         seconds = duration.total_seconds()
         
         # 输出结果统计
-        logging.info(f"Export completed: {total_processed}/{total_items} items in {seconds:.1f} seconds")
+        logging.info(f"Hybrid export completed: {total_processed}/{total_items} items in {seconds:.1f} seconds")
         if seconds > 0:
             logging.info(f"Average speed: {total_processed/seconds:.1f} items/second")
 
