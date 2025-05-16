@@ -2,6 +2,7 @@ import collections
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 from kafka import KafkaProducer
 
@@ -46,6 +47,7 @@ class KafkaItemExporter:
         if item_type is not None and item_type in self.item_type_to_topic_mapping:
             data = json.dumps(item).encode('utf-8')
             logging.debug(data)
+            logging.info(f"start send kafka: {datetime.now()}")
             return self.producer.send(self.topic_prefix + self.item_type_to_topic_mapping[item_type], value=data)
         else:
             logging.warning('Topic for item type "{}" is not configured.'.format(item_type))
