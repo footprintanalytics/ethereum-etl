@@ -1,7 +1,7 @@
 import collections
 import json
 import logging
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 from kafka import KafkaProducer
 
@@ -36,7 +36,7 @@ class KafkaItemExporter:
         pass
 
     def export_items(self, items):
-        with ProcessPoolExecutor(max_workers=8) as executor:
+        with ThreadPoolExecutor(max_workers=8) as executor:
             for item in items:
                 executor.submit(self.export_item, item)
 
