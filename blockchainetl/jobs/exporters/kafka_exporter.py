@@ -188,7 +188,7 @@ class KafkaItemExporter:
         
         # 配置混合并行策略
         cpu_count = multiprocessing.cpu_count()
-        process_count = min(4, cpu_count)  # 最多4个进程，避免过多Kafka连接
+        process_count = cpu_count  # 最多4个进程，避免过多Kafka连接
         threads_per_process = 4  # 每个进程4个线程
         
         logging.info(f"Using {process_count} processes with {threads_per_process} threads each (total {process_count*threads_per_process} workers)")
